@@ -1,0 +1,240 @@
+-- ============================================================================
+-- KIVENDTOUT - INITIALISATION BASE DE DONNÉES PostgreSQL
+-- ============================================================================
+-- Ce script crée le schéma complet de la base de données OLTP
+
+-- ============================================================================
+-- CRÉATION DES TABLES
+-- ============================================================================
+
+-- Table des clients
+CREATE TABLE IF NOT EXISTS customers (
+    customer_id SERIAL PRIMARY KEY,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    first_name VARCHAR(100) NOT NULL,
+    last_name VARCHAR(100) NOT NULL,
+    phone VARCHAR(20),
+    date_of_birth DATE,
+    is_adult BOOLEAN DEFAULT FALSE,
+    identity_verified BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Table des adresses
+CREATE TABLE IF NOT EXISTS addresses (
+    address_id SERIAL PRIMARY KEY,
+    customer_id INTEGER NOT NULL REFERENCES customers(customer_id) ON DELETE CASCADE,
+    address_type VARCHAR(20) CHECK (address_type IN ('billing', 'shipping')),
+    street VARCHAR(255) NOT NULL,
+    city VARCHAR(100) NOT NULL,
+    postal_code VARCHAR(20) NOT NULL,
+    country VARCHAR(100) NOT NULL,
+    is_default BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Table des produits
+CREATE TABLE IF NOT EXISTS products (
+    product_id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    category VARCHAR(100),
+    price NUMERIC(10, 2) NOT NULL CHECK (price >= 0),
+    stock_quantity INTEGER NOT NULL DEFAULT 0 CHECK (stock_quantity >= 0),
+    is_adult_only BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Table des commandes
+CREATE TABLE IF NOT EXISTS orders (
+    order_id SERIAL PRIMARY KEY,
+    customer_id INTEGER NOT NULL REFERENCES customers(customer_id),
+    order_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    status VARCHAR(50) CHECK (status IN ('pending', 'processing', 'shipped', 'delivered', 'cancelled')),
+    total_amount NUMERIC(10, 2) NOT NULL CHECK (total_amount >= 0),
+    shipping_address_id INTEGER REFERENCES addresses(address_id),
+    billing_address_id INTEGER REFERENCES addresses(address_id),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Table des items de commande
+CREATE TABLE IF NOT EXISTS order_items (
+    order_item_id SERIAL PRIMARY KEY,
+    order_id INTEGER NOT NULL REFERENCES orders(order_id) ON DELETE CASCADE,
+    product_id INTEGER NOT NULL REFERENCES products(product_id),
+    quantity INTEGER NOT NULL CHECK (quantity > 0),
+    unit_price NUMERIC(10, 2) NOT NULL CHECK (unit_price >= 0),
+    subtotal NUMERIC(10, 2) GENERATED ALWAYS AS (quantity * unit_price) STORED
+);
+
+-- Table des paiements
+CREATE TABLE IF NOT EXISTS payments (
+    payment_id SERIAL PRIMARY KEY,
+    order_id INTEGER NOT NULL REFERENCES orders(order_id),
+    payment_method VARCHAR(50) CHECK (payment_method IN ('credit_card', 'debit_card', 'paypal', 'bank_transfer')),
+    amount NUMERIC(10, 2) NOT NULL CHECK (amount >= 0),
+    status VARCHAR(50) CHECK (status IN ('pending', 'completed', 'failed', 'refunded')),
+    transaction_id VARCHAR(255) UNIQUE,
+    is_fraudulent BOOLEAN DEFAULT FALSE,
+    fraud_score NUMERIC(5, 2),
+    payment_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Table des vérifications d'identité
+CREATE TABLE IF NOT EXISTS identity_verifications (
+    verification_id SERIAL PRIMARY KEY,
+    customer_id INTEGER NOT NULL REFERENCES customers(customer_id),
+    document_type VARCHAR(50) CHECK (document_type IN ('national_id', 'passport', 'driver_license')),
+    verification_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    is_verified BOOLEAN DEFAULT FALSE,
+    confidence_score NUMERIC(5, 2),
+    extracted_data JSONB,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Table des alertes de fraude
+CREATE TABLE IF NOT EXISTS fraud_alerts (
+    alert_id SERIAL PRIMARY KEY,
+    payment_id INTEGER REFERENCES payments(payment_id),
+    order_id INTEGER REFERENCES orders(order_id),
+    alert_type VARCHAR(100),
+    severity VARCHAR(20) CHECK (severity IN ('low', 'medium', 'high', 'critical')),
+    description TEXT,
+    status VARCHAR(50) CHECK (status IN ('open', 'investigating', 'resolved', 'false_positive')),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    resolved_at TIMESTAMP
+);
+
+-- ============================================================================
+-- CRÉATION DES INDEX
+-- ============================================================================
+
+-- Index pour améliorer les performances des requêtes fréquentes
+CREATE INDEX idx_customers_email ON customers(email);
+CREATE INDEX idx_orders_customer_id ON orders(customer_id);
+CREATE INDEX idx_orders_status ON orders(status);
+CREATE INDEX idx_orders_order_date ON orders(order_date);
+CREATE INDEX idx_payments_order_id ON payments(order_id);
+CREATE INDEX idx_payments_status ON payments(status);
+CREATE INDEX idx_payments_is_fraudulent ON payments(is_fraudulent);
+CREATE INDEX idx_fraud_alerts_status ON fraud_alerts(status);
+CREATE INDEX idx_fraud_alerts_severity ON fraud_alerts(severity);
+CREATE INDEX idx_products_category ON products(category);
+CREATE INDEX idx_addresses_customer_id ON addresses(customer_id);
+
+-- ============================================================================
+-- CRÉATION DES FONCTIONS ET TRIGGERS
+-- ============================================================================
+
+-- Fonction pour mettre à jour automatiquement updated_at
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+-- Triggers pour updated_at
+CREATE TRIGGER update_customers_updated_at BEFORE UPDATE ON customers
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_products_updated_at BEFORE UPDATE ON products
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_orders_updated_at BEFORE UPDATE ON orders
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Fonction pour vérifier si un client est majeur
+CREATE OR REPLACE FUNCTION check_customer_age()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.date_of_birth IS NOT NULL THEN
+        NEW.is_adult := (CURRENT_DATE - NEW.date_of_birth) >= INTERVAL '18 years';
+    END IF;
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+-- Trigger pour vérifier l'âge automatiquement
+CREATE TRIGGER trigger_check_customer_age 
+BEFORE INSERT OR UPDATE ON customers
+    FOR EACH ROW EXECUTE FUNCTION check_customer_age();
+
+-- ============================================================================
+-- INSERTION DE DONNÉES DE TEST
+-- ============================================================================
+
+-- Clients de test
+INSERT INTO customers (email, first_name, last_name, phone, date_of_birth, identity_verified) VALUES
+('alice.martin@example.com', 'Alice', 'Martin', '+33123456789', '1990-05-15', true),
+('bob.dupont@example.com', 'Bob', 'Dupont', '+33123456790', '1985-08-22', true),
+('charlie.bernard@example.com', 'Charlie', 'Bernard', '+33123456791', '2008-12-10', false);
+
+-- Produits de test
+INSERT INTO products (name, description, category, price, stock_quantity, is_adult_only) VALUES
+('Laptop Dell XPS 15', 'Ordinateur portable haute performance', 'Electronics', 1299.99, 50, false),
+('iPhone 15 Pro', 'Smartphone Apple dernière génération', 'Electronics', 1199.00, 100, false),
+('Vin Bordeaux AOC', 'Bouteille de vin rouge premium', 'Alcohol', 45.50, 200, true),
+('Whisky Single Malt', 'Whisky écossais 12 ans d''âge', 'Alcohol', 89.90, 150, true),
+('Clavier mécanique RGB', 'Clavier gaming rétroéclairé', 'Electronics', 129.99, 75, false);
+
+-- Adresses de test
+INSERT INTO addresses (customer_id, address_type, street, city, postal_code, country, is_default) VALUES
+(1, 'billing', '10 Rue de la Paix', 'Paris', '75001', 'France', true),
+(1, 'shipping', '10 Rue de la Paix', 'Paris', '75001', 'France', true),
+(2, 'billing', '25 Avenue des Champs', 'Lyon', '69001', 'France', true);
+
+-- ============================================================================
+-- CRÉATION DE VUES POUR L'ANALYTIQUE
+-- ============================================================================
+
+-- Vue des commandes avec détails client
+CREATE OR REPLACE VIEW v_orders_details AS
+SELECT 
+    o.order_id,
+    o.order_date,
+    o.status,
+    o.total_amount,
+    c.customer_id,
+    c.email,
+    c.first_name,
+    c.last_name,
+    COUNT(oi.order_item_id) as items_count
+FROM orders o
+JOIN customers c ON o.customer_id = c.customer_id
+LEFT JOIN order_items oi ON o.order_id = oi.order_id
+GROUP BY o.order_id, c.customer_id;
+
+-- Vue des paiements suspects
+CREATE OR REPLACE VIEW v_suspicious_payments AS
+SELECT 
+    p.payment_id,
+    p.order_id,
+    p.amount,
+    p.status,
+    p.fraud_score,
+    p.is_fraudulent,
+    o.customer_id,
+    c.email
+FROM payments p
+JOIN orders o ON p.order_id = o.order_id
+JOIN customers c ON o.customer_id = c.customer_id
+WHERE p.fraud_score > 0.7 OR p.is_fraudulent = true;
+
+-- ============================================================================
+-- AFFICHAGE DU STATUT
+-- ============================================================================
+
+DO $$
+BEGIN
+    RAISE NOTICE '✅ Base de données KiVendTout initialisée avec succès !';
+    RAISE NOTICE '📊 Tables créées : 9';
+    RAISE NOTICE '🔍 Index créés : 10';
+    RAISE NOTICE '⚙️  Triggers créés : 4';
+    RAISE NOTICE '👁️  Vues créées : 2';
+END $$;
