@@ -260,6 +260,55 @@ services:
     networks:
       - kivendtout-network
 
+  # ============================================================================
+  # STREAM PROCESSING - APACHE FLINK
+  # ============================================================================
+  flink-jobmanager:
+    image: flink:1.18-scala_2.12-java11
+    container_name: kivendtout-flink-jobmanager
+    command: jobmanager
+    ports:
+      - "8083:8081"  # Flink Web UI (mappé sur 8083)
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: flink-jobmanager
+        taskmanager.numberOfTaskSlots: 4
+        parallelism.default: 2
+        state.backend: filesystem
+        state.checkpoints.dir: file:///tmp/flink-checkpoints
+        state.savepoints.dir: file:///tmp/flink-savepoints
+    volumes:
+      - ./flink/jobs:/opt/flink/jobs
+      - flink_checkpoints:/tmp/flink-checkpoints
+      - flink_savepoints:/tmp/flink-savepoints
+    networks:
+      - kivendtout-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  flink-taskmanager:
+    image: flink:1.18-scala_2.12-java11
+    container_name: kivendtout-flink-taskmanager
+    command: taskmanager
+    depends_on:
+      - flink-jobmanager
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: flink-jobmanager
+        taskmanager.numberOfTaskSlots: 4
+        parallelism.default: 2
+    volumes:
+      - ./flink/jobs:/opt/flink/jobs
+      - flink_checkpoints:/tmp/flink-checkpoints
+      - flink_savepoints:/tmp/flink-savepoints
+    networks:
+      - kivendtout-network
+
 # ============================================================================
 # VOLUMES PERSISTANTS
 # ============================================================================
@@ -274,6 +323,8 @@ volumes:
   kafka_3_data:
   prometheus_data:
   grafana_data:
+  flink_checkpoints:
+  flink_savepoints:
 
 # ============================================================================
 # RÉSEAU

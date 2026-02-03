@@ -1,0 +1,90 @@
+/Users/pierrechevalier/Desktop/PERSO/EFREI/M1 DATA/Patator/api/fraud_dashboard_api.py:206: DeprecationWarning: 
+        on_event is deprecated, use lifespan event handlers instead.
+
+        Read more about it in the
+        [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+        
+  @app.on_event("startup")
+INFO:     Started server process [97367]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+🚀 Démarrage API Fraud Detection...
+✅ Table fraud_alerts initialisée
+📥 Synchronisation initiale depuis Kafka...
+✅ 0 alertes synchronisées
+INFO:     127.0.0.1:51498 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51507 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51513 - "POST /api/sync HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51858 - "POST /api/sync HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51875 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51930 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51931 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51944 - "GET /api/alerts?limit=3 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51965 - "GET /api/alerts?limit=2 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51974 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51975 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51979 - "POST /api/alerts/FRD_C01196_1770132118208/decide HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:51992 - "POST /api/alerts/FRD_C01196_1770132118208/decide HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51998 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51999 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52006 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52009 - "POST /api/alerts/FRD_C01573_1770132118206/decide HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52014 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52026 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52028 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52036 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52037 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52041 - "OPTIONS /api/alerts/FRD_C00523_1770132118192/decide HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52041 - "POST /api/alerts/FRD_C00523_1770132118192/decide HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52041 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52044 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52055 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52056 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52069 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52070 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52079 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52080 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52095 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52097 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52141 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52147 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52148 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52166 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52167 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52181 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52183 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52197 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52200 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52208 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52209 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52218 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52219 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52219 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52218 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52218 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52219 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52219 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52219 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52219 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52234 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52234 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52234 - "POST /api/sync HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52246 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52247 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52234 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52251 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52255 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52260 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52261 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52266 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52268 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52272 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52280 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52282 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52291 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52292 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52298 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52299 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52307 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52309 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK

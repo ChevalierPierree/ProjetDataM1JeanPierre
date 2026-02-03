@@ -1,0 +1,10 @@
+::1 - - [03/Feb/2026 17:03:48] "HEAD /fraud_dashboard.html HTTP/1.1" 200 -
+::1 - - [03/Feb/2026 17:03:56] "GET /fraud_dashboard.html HTTP/1.1" 200 -
+::1 - - [03/Feb/2026 17:03:58] code 404, message File not found
+::1 - - [03/Feb/2026 17:03:58] "GET /favicon.ico HTTP/1.1" 404 -
+::1 - - [03/Feb/2026 17:04:07] "GET /fraud_dashboard.html?id=f7ae9632-592a-42a8-bfe8-644a8e4cc319&vscodeBrowserReqId=1770134647738 HTTP/1.1" 200 -
+::1 - - [03/Feb/2026 17:04:27] "GET /fraud_dashboard.html HTTP/1.1" 304 -
+::1 - - [03/Feb/2026 17:04:31] "GET /fraud_dashboard.html HTTP/1.1" 200 -
+::1 - - [03/Feb/2026 17:04:33] "GET /fraud_dashboard.html HTTP/1.1" 304 -
+::1 - - [03/Feb/2026 17:04:33] "GET /fraud_dashboard.html HTTP/1.1" 304 -
+::1 - - [03/Feb/2026 17:05:25] "GET /fraud_dashboard.html HTTP/1.1" 304 -

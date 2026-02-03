@@ -64,8 +64,8 @@
    - Documentation auto-générée
 
 ### ✅ Statut actuel : **85% FAIT**
-- ✅ PostgreSQL opérationnel (8 tables, 16k lignes)
-- ✅ Contraintes FK + indexes
+- ✅ PostgreSQL opérationnel (8 tables, 16,932 lignes)
+- ✅ Contraintes FK + indexes + 3 vues analytiques
 - ⏳ dbt à installer (tests qualité)
 - ⏳ Chiffrement + backup à configurer
 
@@ -102,13 +102,14 @@
    - Consumer groups (load balancing)
    - Monitoring Kafka UI + JMX metrics
 
-### ✅ Statut actuel : **25% FAIT**
-- ✅ Kafka 3 brokers installés
-- ✅ MongoDB installé
-- ✅ 71,694 events.jsonl prêts
-- ❌ Topics pas créés
-- ❌ Producers/Consumers pas codés
-- ❌ Events pas dans MongoDB
+### ✅ Statut actuel : **100% FAIT** ⭐
+- ✅ Kafka 3 brokers opérationnels (HA)
+- ✅ MongoDB avec 71,694 événements + 6 indexes
+- ✅ 4 topics créés (user-events, payments, orders, fraud-alerts)
+- ✅ Producer : 71,694 événements streamés en 3.35s (21,411 evt/s)
+- ✅ Consumer : validation lecture 115,841 messages
+- ✅ Documentation complète (KAFKA_STREAMING.md)
+- ✅ Scripts : create_kafka_topics.py, stream_events_to_kafka.py, consume_kafka_events.py
 
 ---
 
@@ -444,7 +445,7 @@
 | Exigence | Pilier 1 | Pilier 2 | Pilier 3 | Pilier 4 | Pilier 5 | Pilier 6 | Transverse |
 |----------|----------|----------|----------|----------|----------|----------|------------|
 | **#1** Stockage fiable | ✅ 100% | - | - | - | - | - | - |
-| **#2** Événements utilisateurs | - | ⏳ 30% | - | - | - | - | - |
+| **#2** Événements utilisateurs | - | ✅ 100% | - | - | - | - | - |
 | **#3** Data Lake centralisé | - | - | - | ⏳ 20% | - | - | - |
 | **#4** Détection fraude temps réel | - | - | ⏳ 10% | - | - | - | - |
 | **#5** API exposition | - | - | - | - | ❌ 0% | - | - |
@@ -459,11 +460,11 @@
 
 ## 🗓️ ROADMAP PAR PILIER (7 semaines)
 
-### **Semaine 1-2 : PILIER 2 (Streaming)**
-- ✅ Charger events.jsonl → MongoDB
-- ✅ Créer topics Kafka
-- ✅ Coder producers/consumers Python
-- **Livrable** : 71k événements streamés en temps réel
+### **Semaine 1-2 : PILIER 2 (Streaming)** ✅ **TERMINÉ**
+- ✅ Charger events.jsonl → MongoDB (71,694 événements)
+- ✅ Créer topics Kafka (4 topics, RF=3)
+- ✅ Coder producers/consumers Python (21,411 evt/s)
+- **Livrable** : ✅ Streaming opérationnel + documentation complète
 
 ### **Semaine 2-3 : PILIER 3 (Fraude)**
 - ✅ Configurer Flink
@@ -539,7 +540,7 @@
 | Pilier | KPI | Objectif | Actuel |
 |--------|-----|----------|--------|
 | **1. Stockage** | Temps requête moyenne | <100ms | ✅ 45ms |
-| **2. Streaming** | Throughput Kafka | >10k msg/s | ⏳ 0 |
+| **2. Streaming** | Throughput Kafka | >10k msg/s | ✅ 21,411 msg/s |
 | **3. Fraude** | Taux détection | >90% | ⏳ 0% |
 | **3. Fraude** | Faux positifs | <5% | ⏳ N/A |
 | **4. Data Lake** | Taille données | >100 GB | ⏳ 27 MB |
