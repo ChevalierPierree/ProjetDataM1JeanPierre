@@ -154,7 +154,7 @@ CREATE OR REPLACE FUNCTION check_customer_age()
 RETURNS TRIGGER AS $$
 BEGIN
     IF NEW.date_of_birth IS NOT NULL THEN
-        NEW.is_adult := (CURRENT_DATE - NEW.date_of_birth) >= INTERVAL '18 years';
+        NEW.is_adult := (EXTRACT(YEAR FROM AGE(CURRENT_DATE, NEW.date_of_birth)) >= 18);
     END IF;
     RETURN NEW;
 END;
