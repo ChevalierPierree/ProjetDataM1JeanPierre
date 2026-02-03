@@ -9,12 +9,14 @@
 
 -- Table des clients
 CREATE TABLE IF NOT EXISTS customers (
-    customer_id SERIAL PRIMARY KEY,
+    customer_id VARCHAR(50) PRIMARY KEY,  -- Changed from SERIAL to match CSV (C00001 format)
     email VARCHAR(255) UNIQUE NOT NULL,
     first_name VARCHAR(100) NOT NULL,
     last_name VARCHAR(100) NOT NULL,
     phone VARCHAR(20),
     date_of_birth DATE,
+    country VARCHAR(2),  -- NEW: ISO country code from CSV
+    registration_ip VARCHAR(50),  -- NEW: IP address at signup
     is_adult BOOLEAN DEFAULT FALSE,
     identity_verified BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -24,8 +26,8 @@ CREATE TABLE IF NOT EXISTS customers (
 -- Table des adresses
 CREATE TABLE IF NOT EXISTS addresses (
     address_id SERIAL PRIMARY KEY,
-    customer_id INTEGER NOT NULL REFERENCES customers(customer_id) ON DELETE CASCADE,
-    address_type VARCHAR(20) CHECK (address_type IN ('billing', 'shipping')),
+    customer_id VARCHAR(50) NOT NULL REFERENCES customers(customer_id) ON DELETE CASCADE,  -- Changed to VARCHAR
+    address_type VARCHAR(20) CHECK (address_type IN ('billing', 'shipping', 'both')),  -- Added 'both'
     street VARCHAR(255) NOT NULL,
     city VARCHAR(100) NOT NULL,
     postal_code VARCHAR(20) NOT NULL,
