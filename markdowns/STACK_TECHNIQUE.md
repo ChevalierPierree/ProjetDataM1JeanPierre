@@ -30,6 +30,7 @@
 - Format Parquet pour compression et performance analytique
 - Compatible avec tout l'écosystème Big Data
 
+
 ### **Message Broker (Streaming)**
 **Apache Kafka 3.6+**
 - Ingestion haute volumétrie des événements temps réel
