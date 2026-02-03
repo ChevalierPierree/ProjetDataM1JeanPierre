@@ -118,6 +118,23 @@
 - ❌ Producers/Consumers pas codés
 - ❌ Events pas dans MongoDB
 
+### 🚀 Démarrage (MVP streaming)
+
+**Objectif** : valider un flux simple et mesurable (JSONL -> Kafka -> MongoDB).
+
+**Plan MVP** :
+1. Créer les topics Kafka `user-events`, `payments`, `orders`, `cart-events` avec 3 partitions et un facteur de réplication 3.
+2. Produire les événements depuis `kivendtout_dataset/events.jsonl` vers `user-events`.
+3. Consommer `user-events` et insérer dans la collection MongoDB `events`.
+4. Ajouter les index MongoDB et une rétention TTL de 2 ans.
+5. Valider les volumes et la latence de bout en bout.
+
+**Artefacts** :
+1. `scripts/streaming/create_topics.sh`
+2. `scripts/streaming/producer_events.py`
+3. `scripts/streaming/consumer_events_to_mongo.py`
+4. `markdowns/STREAMING_MVP.md` (mode opératoire + métriques)
+
 ---
 
 ## 🚨 PILIER 3 : SÉCURITÉ - DÉTECTION FRAUDE TEMPS RÉEL

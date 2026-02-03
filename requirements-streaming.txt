@@ -1,0 +1,4 @@
+# Minimal dependencies to run streaming MVP scripts
+python-dotenv==1.0.0
+kafka-python==2.0.2
+pymongo==4.6.1
