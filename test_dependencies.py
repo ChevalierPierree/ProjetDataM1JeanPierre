@@ -26,6 +26,8 @@ def main():
         ("psycopg2", "psycopg2-binary (PostgreSQL)"),
         ("pymongo", "pymongo (MongoDB)"),
         ("kafka", "kafka-python (Apache Kafka)"),
+        ("lz4", "lz4 (Kafka Compression)"),
+        ("snappy", "python-snappy (Kafka Compression)"),
         ("fastapi", "fastapi (API Framework)"),
         ("uvicorn", "uvicorn (ASGI Server)"),
         ("pydantic", "pydantic (Data Validation)"),
@@ -58,7 +60,9 @@ def main():
         print(f"⚠️  {failed} dépendance(s) manquante(s)")
         print()
         print("Pour installer les dépendances manquantes:")
-        print("  pip3 install -r requirements.txt")
+        print("  pip install -r requirements.txt")
+        print()
+        print("Note: Si vous êtes dans un venv, utilisez 'pip' au lieu de 'pip3'")
         return 1
 
 if __name__ == "__main__":
