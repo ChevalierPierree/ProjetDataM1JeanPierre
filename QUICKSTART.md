@@ -2,15 +2,34 @@
 
 ## Installation en 3 Commandes
 
+### Option A - Installation directe (recommandée)
 ```bash
 # 1. Cloner
 git clone https://github.com/ChevalierPierree/ProjetDataM1JeanPierre.git
 cd ProjetDataM1JeanPierre && git checkout PierreDump
 
-# 2. Installer dépendances (8 packages essentiels)
+# 2. Installer dépendances (10 packages essentiels)
 pip3 install -r requirements.txt
 
 # 3. Lancer TOUT
+chmod +x patator && ./patator
+```
+
+### Option B - Avec environnement virtuel
+```bash
+# 1. Cloner
+git clone https://github.com/ChevalierPierree/ProjetDataM1JeanPierre.git
+cd ProjetDataM1JeanPierre && git checkout PierreDump
+
+# 2. Créer et activer venv
+python3 -m venv .venv
+source .venv/bin/activate  # Mac/Linux
+# OU : .venv\Scripts\activate  # Windows
+
+# 3. Installer dépendances (utiliser pip, pas pip3 dans le venv!)
+pip install -r requirements.txt
+
+# 4. Lancer TOUT
 chmod +x patator && ./patator
 ```
 
