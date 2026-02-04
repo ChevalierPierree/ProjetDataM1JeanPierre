@@ -169,11 +169,30 @@ start_docker_services() {
     print_success "Services Docker démarrés"
     
     # Attendre que les services critiques soient prêts
-    print_step "Attente des services critiques"
-    wait_for_service "http://localhost:5432" "PostgreSQL" || true
-    wait_for_service "http://localhost:9092" "Kafka" || true
+    print_step "Attente des services critiques..."
     
-    sleep 5
+    # Vérifier PostgreSQL
+    local pg_attempts=0
+    while [ $pg_attempts -lt 30 ]; do
+        if docker compose exec -T postgres pg_isready -U postgres >/dev/null 2>&1; then
+            print_success "PostgreSQL est prêt"
+            break
+        fi
+        sleep 1
+        ((pg_attempts++))
+    done
+    
+    # Vérifier Kafka
+    local kafka_attempts=0
+    while [ $kafka_attempts -lt 30 ]; do
+        if docker compose exec -T kafka-1 kafka-broker-api-versions --bootstrap-server localhost:9092 >/dev/null 2>&1; then
+            print_success "Kafka est prêt"
+            break
+        fi
+        sleep 1
+        ((kafka_attempts++))
+    done
+    
     print_success "Infrastructure Docker opérationnelle"
 }
 
