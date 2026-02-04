@@ -26,8 +26,9 @@ Architecture de données complète pour plateforme e-commerce avec :
 # Cloner le projet
 git clone https://github.com/ChevalierPierree/ProjetDataM1JeanPierre.git
 cd ProjetDataM1JeanPierre
+git checkout PierreDump
 
-# Installer les dépendances
+# Installer les dépendances (8 packages essentiels uniquement)
 pip3 install -r requirements.txt
 
 # Lancer TOUT en une commande

@@ -1,38 +1,73 @@
-# ============================================================================
-# KIVENDTOUT - DÉPENDANCES PYTHON
-# ============================================================================
+# ============================================================================# ============================================================================
 
-# Core
+# KIVENDTOUT - DÉPENDANCES PYTHON# KIVENDTOUT - DÉPENDANCES PYTHON
+
+# ============================================================================# ============================================================================
+
+# Installation : pip3 install -r requirements.txt
+
+# Compatible : Mac (Intel/M1/M2), Linux, Windows# Core
+
 python-dotenv==1.0.0
 
-# Base de données
-psycopg2-binary==2.9.9
-asyncpg==0.29.0
-pymongo==4.6.1
+# ============================================================================
+
+# BASES DE DONNÉES# Base de données
+
+# ============================================================================psycopg2-binary==2.9.9
+
+psycopg2-binary==2.9.9          # PostgreSQL (version binaire, pas besoin de compiler)asyncpg==0.29.0
+
+pymongo==4.6.1                  # MongoDBpymongo==4.6.1
+
 motor==3.3.2
 
-# Apache Airflow
-apache-airflow==2.8.1
-apache-airflow-providers-postgres==5.10.0
+# ============================================================================
+
+# APACHE KAFKA# Apache Airflow
+
+# ============================================================================apache-airflow==2.8.1
+
+kafka-python==2.0.2             # Client Kafka Pythonapache-airflow-providers-postgres==5.10.0
+
 apache-airflow-providers-amazon==8.16.0
 
-# dbt
-dbt-core==1.7.7
-dbt-postgres==1.7.7
+# ============================================================================
 
-# Apache Kafka
+# API & WEB# dbt
+
+# ============================================================================dbt-core==1.7.7
+
+fastapi==0.109.0                # Framework API modernedbt-postgres==1.7.7
+
+uvicorn==0.27.0                 # Serveur ASGI pour FastAPI
+
+pydantic==2.5.3                 # Validation de données# Apache Kafka
+
 kafka-python==2.0.2
-confluent-kafka==2.3.0
 
-# Apache Flink (PyFlink)
-apache-flink==1.18.0
+# ============================================================================confluent-kafka==2.3.0
+
+# TRAITEMENT DE DONNÉES
+
+# ============================================================================# Apache Flink (PyFlink)
+
+pandas==2.2.0                   # Manipulation de données (version stable)apache-flink==1.18.0
+
+numpy==1.26.3                   # Calculs numériques
 
 # FastAPI & Web
-fastapi==0.109.0
-uvicorn[standard]==0.27.0
-pydantic==2.5.3
-pydantic-settings==2.1.0
-python-multipart==0.0.6
+
+# ============================================================================fastapi==0.109.0
+
+# UTILITAIRESuvicorn[standard]==0.27.0
+
+# ============================================================================pydantic==2.5.3
+
+python-dotenv==1.0.0            # Variables d'environnementpydantic-settings==2.1.0
+
+requests==2.31.0                # Requêtes HTTPpython-multipart==0.0.6
+
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
 

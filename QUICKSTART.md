@@ -7,8 +7,8 @@
 git clone https://github.com/ChevalierPierree/ProjetDataM1JeanPierre.git
 cd ProjetDataM1JeanPierre && git checkout PierreDump
 
-# 2. Installer dépendances
-pip3 install kafka-python psycopg2-binary pymongo fastapi uvicorn pydantic apache-flink
+# 2. Installer dépendances (8 packages essentiels)
+pip3 install -r requirements.txt
 
 # 3. Lancer TOUT
 chmod +x patator && ./patator
