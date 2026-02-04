@@ -1,9 +1,10 @@
 <!DOCTYPE html>
 <html lang="fr">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🕵️ Fraud Detection Dashboard - KiVendTout</title>
+    <title>🕵️ Tableau de Bord Détection de Fraude - KiVendTout</title>
     <style>
         * {
             margin: 0;
@@ -27,7 +28,7 @@
             background: white;
             padding: 30px;
             border-radius: 15px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
             margin-bottom: 30px;
             text-align: center;
         }
@@ -49,7 +50,7 @@
             background: white;
             padding: 25px;
             border-radius: 12px;
-            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
             transition: transform 0.3s;
         }
 
@@ -74,7 +75,7 @@
             background: white;
             padding: 20px;
             border-radius: 12px;
-            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
             margin-bottom: 20px;
             display: flex;
             gap: 15px;
@@ -82,7 +83,8 @@
             align-items: center;
         }
 
-        select, button {
+        select,
+        button {
             padding: 10px 20px;
             border-radius: 8px;
             border: 2px solid #667eea;
@@ -110,7 +112,7 @@
             background: white;
             padding: 25px;
             border-radius: 12px;
-            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
         }
 
         .alert-item {
@@ -159,9 +161,17 @@
             font-size: 0.9em;
         }
 
-        .severity-HIGH { background: #e74c3c; }
-        .severity-MEDIUM { background: #f39c12; }
-        .severity-LOW { background: #3498db; }
+        .severity-HIGH {
+            background: #e74c3c;
+        }
+
+        .severity-MEDIUM {
+            background: #f39c12;
+        }
+
+        .severity-LOW {
+            background: #3498db;
+        }
 
         .alert-details {
             display: grid;
@@ -264,8 +274,13 @@
         }
 
         @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
         }
 
         .spinner {
@@ -279,29 +294,31 @@
         }
     </style>
 </head>
+
 <body>
     <div class="container">
         <header>
-            <h1>🕵️ Fraud Detection Dashboard</h1>
-            <p style="color: #666; margin-top: 10px;">KiVendTout - Real-time Fraud Monitoring</p>
+            <h1>🕵️ Tableau de Bord Détection de Fraude</h1>
+            <p style="color: #666; margin-top: 10px;">KiVendTout - Surveillance Fraude en Temps Réel</p>
         </header>
 
         <!-- Stats -->
         <div class="stats-grid" id="stats-grid">
             <div class="stat-card">
-                <h3>Total Alertes</h3>
+                <h3>📊 Total Alertes</h3>
                 <div class="value" id="total-alerts">-</div>
             </div>
             <div class="stat-card">
-                <h3>Fraud Rate</h3>
+                <h3>🚨 Taux de Fraude</h3>
                 <div class="value" id="fraud-rate">-%</div>
+                <p style="font-size: 0.75em; color: #999; margin-top: 5px;">Alertes / Paiements traités</p>
             </div>
             <div class="stat-card">
-                <h3>HIGH Severity</h3>
+                <h3>🔴 Sévérité HAUTE</h3>
                 <div class="value" id="high-severity" style="color: #e74c3c;">-</div>
             </div>
             <div class="stat-card">
-                <h3>Pending Review</h3>
+                <h3>⏳ En Attente</h3>
                 <div class="value" id="pending-review" style="color: #f39c12;">-</div>
             </div>
         </div>
@@ -311,16 +328,16 @@
             <label style="font-weight: bold; color: #333;">Filtres:</label>
             <select id="filter-status">
                 <option value="">Tous les statuts</option>
-                <option value="PENDING_REVIEW">En attente</option>
+                <option value="PENDING_REVIEW">En attente de révision</option>
                 <option value="INVESTIGATING">En investigation</option>
                 <option value="APPROVED">Approuvé</option>
                 <option value="BLOCKED">Bloqué</option>
             </select>
             <select id="filter-severity">
                 <option value="">Toutes sévérités</option>
-                <option value="HIGH">HIGH</option>
-                <option value="MEDIUM">MEDIUM</option>
-                <option value="LOW">LOW</option>
+                <option value="HIGH">🔴 HAUTE</option>
+                <option value="MEDIUM">🟠 MOYENNE</option>
+                <option value="LOW">🔵 BASSE</option>
             </select>
             <button onclick="loadAlerts()">🔄 Rafraîchir</button>
             <button onclick="syncFromKafka()">📥 Sync Kafka</button>
@@ -328,7 +345,7 @@
 
         <!-- Alerts -->
         <div class="alerts-container">
-            <h2 style="margin-bottom: 20px; color: #333;">📋 Alertes de fraude</h2>
+            <h2 style="margin-bottom: 20px; color: #333;">📋 Alertes de Fraude Détectées</h2>
             <div id="alerts-list">
                 <div class="loading">
                     <div class="spinner"></div>
@@ -381,60 +398,63 @@
                     <div class="alert-item ${alert.severity}">
                         <div class="alert-header">
                             <div class="alert-id">${alert.alert_id}</div>
-                            <span class="severity-badge severity-${alert.severity}">${alert.severity}</span>
+                            <span class="severity-badge severity-${alert.severity}">
+                                ${alert.severity === 'HIGH' ? '🔴 HAUTE' : alert.severity === 'MEDIUM' ? '🟠 MOYENNE' : '🔵 BASSE'}
+                            </span>
                         </div>
 
                         <div class="alert-details">
                             <div class="detail-item">
-                                <div class="detail-label">Customer</div>
+                                <div class="detail-label">👤 Client</div>
                                 <div class="detail-value">${alert.customer_id}</div>
                             </div>
                             <div class="detail-item">
-                                <div class="detail-label">Risk Score</div>
+                                <div class="detail-label">⚠️ Score de Risque</div>
                                 <div class="detail-value">${alert.risk_score}/100</div>
                             </div>
                             <div class="detail-item">
-                                <div class="detail-label">Device</div>
+                                <div class="detail-label">📱 Appareil</div>
                                 <div class="detail-value">${alert.device}</div>
                             </div>
                             <div class="detail-item">
-                                <div class="detail-label">Country</div>
+                                <div class="detail-label">🌍 Pays</div>
                                 <div class="detail-value">${alert.customer_country}</div>
                             </div>
                             <div class="detail-item">
-                                <div class="detail-label">Status</div>
-                                <div class="detail-value">${alert.status}</div>
+                                <div class="detail-label">📊 Statut</div>
+                                <div class="detail-value">${translateStatus(alert.status)}</div>
                             </div>
                             <div class="detail-item">
-                                <div class="detail-label">Timestamp</div>
-                                <div class="detail-value">${new Date(alert.alert_timestamp).toLocaleString()}</div>
+                                <div class="detail-label">🕐 Date/Heure</div>
+                                <div class="detail-value">${new Date(alert.alert_timestamp).toLocaleString('fr-FR')}</div>
                             </div>
                         </div>
 
                         <div class="fraud-reasons">
-                            <strong>Raisons:</strong>
-                            ${alert.fraud_reasons.map(r => `<span class="reason-tag">${r}</span>`).join('')}
+                            <strong>🚩 Raisons de détection:</strong>
+                            ${alert.fraud_reasons.map(r => `<span class="reason-tag">${translateReason(r)}</span>`).join('')}
                         </div>
 
                         ${alert.status === 'PENDING_REVIEW' ? `
                             <div class="alert-actions">
                                 <button class="btn-approve" onclick="decideAlert('${alert.alert_id}', 'APPROVE')">
-                                    ✅ Approuver
+                                    ✅ Approuver (Transaction Légitime)
                                 </button>
                                 <button class="btn-block" onclick="decideAlert('${alert.alert_id}', 'BLOCK')">
-                                    🚫 Bloquer
+                                    🚫 Bloquer (Fraude Confirmée)
                                 </button>
                                 <button class="btn-investigate" onclick="decideAlert('${alert.alert_id}', 'INVESTIGATE')">
-                                    🔍 Investiguer
+                                    🔍 Investiguer Plus
                                 </button>
                             </div>
                         ` : ''}
 
                         ${alert.decision ? `
                             <div style="margin-top: 15px; padding: 10px; background: #f8f9fa; border-radius: 6px;">
-                                <strong>Décision:</strong> ${alert.decision} 
-                                par ${alert.decided_by} 
-                                le ${new Date(alert.decided_at).toLocaleString()}
+                                <strong>✅ Décision prise:</strong> ${translateDecision(alert.decision)} 
+                                par <em>${alert.decided_by}</em> 
+                                le ${new Date(alert.decided_at).toLocaleString('fr-FR')}
+                                ${alert.notes ? `<br><strong>Notes:</strong> ${alert.notes}` : ''}
                             </div>
                         ` : ''}
                     </div>
@@ -442,7 +462,7 @@
 
             } catch (error) {
                 console.error('Erreur chargement alertes:', error);
-                document.getElementById('alerts-list').innerHTML = 
+                document.getElementById('alerts-list').innerHTML =
                     '<div class="no-alerts">Erreur de chargement. Vérifiez que l\'API est démarrée.</div>';
             }
         }
@@ -478,17 +498,54 @@
             }
         }
 
+        // Traductions
+        function translateStatus(status) {
+            const translations = {
+                'PENDING_REVIEW': '⏳ En attente de révision',
+                'INVESTIGATING': '🔍 En investigation',
+                'APPROVED': '✅ Approuvé',
+                'BLOCKED': '🚫 Bloqué'
+            };
+            return translations[status] || status;
+        }
+
+        function translateDecision(decision) {
+            const translations = {
+                'APPROVE': '✅ APPROUVÉ',
+                'BLOCK': '🚫 BLOQUÉ',
+                'INVESTIGATE': '🔍 EN INVESTIGATION'
+            };
+            return translations[decision] || decision;
+        }
+
+        function translateReason(reason) {
+            const translations = {
+                'FIRST_PAYMENT': '💳 Premier paiement',
+                'NEW_CUSTOMER': '🆕 Nouveau client',
+                'UNUSUAL_HOUR': '🌙 Horaire suspect (2h-6h)',
+                'MOBILE_DEVICE': '📱 Appareil mobile',
+                'DIRECT_TRAFFIC': '🔗 Trafic direct (sans référent)',
+                'PAYMENT_FAILED': '❌ Paiement échoué',
+                'VELOCITY_HIGH': '⚡ Vélocité élevée (3+ paiements/10min)',
+                'NEW_DEVICE': '📲 Nouvel appareil détecté',
+                'UNUSUAL_AMOUNT': '💰 Montant inhabituel (>3x moyenne)',
+                'FAST_CHECKOUT': '⏱️ Checkout rapide (<30s)',
+                'GEO_MISMATCH': '🌍 Pays différent du profil'
+            };
+            return translations[reason] || reason;
+        }
+
         // Sync depuis Kafka
         async function syncFromKafka() {
             try {
-                document.getElementById('alerts-list').innerHTML = 
+                document.getElementById('alerts-list').innerHTML =
                     '<div class="loading"><div class="spinner"></div>Synchronisation depuis Kafka...</div>';
-                
+
                 const response = await fetch(`${API_URL}/api/sync`, {
                     method: 'POST'
                 });
                 const result = await response.json();
-                
+
                 alert(`✅ ${result.message}`);
                 loadAlerts();
                 loadStats();
@@ -502,7 +559,7 @@
         window.addEventListener('DOMContentLoaded', () => {
             loadStats();
             loadAlerts();
-            
+
             // Rafraîchissement auto toutes les 30 secondes
             setInterval(() => {
                 loadStats();
@@ -511,4 +568,5 @@
         });
     </script>
 </body>
+
 </html>

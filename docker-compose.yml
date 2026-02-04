@@ -17,7 +17,7 @@ services:
     networks:
       - kivendtout-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -56,14 +56,14 @@ services:
       MINIO_ROOT_USER: minio
       MINIO_ROOT_PASSWORD: minio123
     ports:
-      - "9000:9000"  # API
-      - "9001:9001"  # Console web
+      - "9000:9000" # API
+      - "9001:9001" # Console web
     volumes:
       - minio_data:/data
     networks:
       - kivendtout-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
       interval: 30s
       timeout: 20s
       retries: 3
@@ -75,15 +75,7 @@ services:
     depends_on:
       - minio
     entrypoint: >
-      /bin/sh -c "
-      sleep 5;
-      /usr/bin/mc config host add myminio http://minio:9000 minio minio123;
-      /usr/bin/mc mb myminio/bronze --ignore-existing;
-      /usr/bin/mc mb myminio/silver --ignore-existing;
-      /usr/bin/mc mb myminio/gold --ignore-existing;
-      /usr/bin/mc mb myminio/models --ignore-existing;
-      exit 0;
-      "
+      /bin/sh -c " sleep 5; /usr/bin/mc config host add myminio http://minio:9000 minio minio123; /usr/bin/mc mb myminio/bronze --ignore-existing; /usr/bin/mc mb myminio/silver --ignore-existing; /usr/bin/mc mb myminio/gold --ignore-existing; /usr/bin/mc mb myminio/models --ignore-existing; exit 0; "
     networks:
       - kivendtout-network
 
@@ -104,7 +96,7 @@ services:
     networks:
       - kivendtout-network
     healthcheck:
-      test: ["CMD", "bash", "-c", "echo ruok | nc localhost 2181"]
+      test: [ "CMD", "bash", "-c", "echo ruok | nc localhost 2181" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -132,7 +124,7 @@ services:
     networks:
       - kivendtout-network
     healthcheck:
-      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      test: [ "CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092" ]
       interval: 10s
       timeout: 10s
       retries: 5
@@ -160,7 +152,7 @@ services:
     networks:
       - kivendtout-network
     healthcheck:
-      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9093"]
+      test: [ "CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9093" ]
       interval: 10s
       timeout: 10s
       retries: 5
@@ -188,7 +180,7 @@ services:
     networks:
       - kivendtout-network
     healthcheck:
-      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9094"]
+      test: [ "CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9094" ]
       interval: 10s
       timeout: 10s
       retries: 5
@@ -268,7 +260,7 @@ services:
     container_name: kivendtout-flink-jobmanager
     command: jobmanager
     ports:
-      - "8083:8081"  # Flink Web UI (mappé sur 8083)
+      - "8083:8081" # Flink Web UI (mappé sur 8083)
     environment:
       - |
         FLINK_PROPERTIES=
@@ -285,7 +277,7 @@ services:
     networks:
       - kivendtout-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8081"]
+      test: [ "CMD", "curl", "-f", "http://localhost:8081" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -326,9 +318,9 @@ volumes:
   flink_checkpoints:
   flink_savepoints:
 
-# ============================================================================
-# RÉSEAU
-# ============================================================================
+    # ============================================================================
+    # RÉSEAU
+    # ============================================================================
 networks:
   kivendtout-network:
     driver: bridge

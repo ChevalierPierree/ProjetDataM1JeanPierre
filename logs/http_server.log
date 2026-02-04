@@ -1,10 +1,30 @@
-::1 - - [03/Feb/2026 17:03:48] "HEAD /fraud_dashboard.html HTTP/1.1" 200 -
-::1 - - [03/Feb/2026 17:03:56] "GET /fraud_dashboard.html HTTP/1.1" 200 -
-::1 - - [03/Feb/2026 17:03:58] code 404, message File not found
-::1 - - [03/Feb/2026 17:03:58] "GET /favicon.ico HTTP/1.1" 404 -
-::1 - - [03/Feb/2026 17:04:07] "GET /fraud_dashboard.html?id=f7ae9632-592a-42a8-bfe8-644a8e4cc319&vscodeBrowserReqId=1770134647738 HTTP/1.1" 200 -
-::1 - - [03/Feb/2026 17:04:27] "GET /fraud_dashboard.html HTTP/1.1" 304 -
-::1 - - [03/Feb/2026 17:04:31] "GET /fraud_dashboard.html HTTP/1.1" 200 -
-::1 - - [03/Feb/2026 17:04:33] "GET /fraud_dashboard.html HTTP/1.1" 304 -
-::1 - - [03/Feb/2026 17:04:33] "GET /fraud_dashboard.html HTTP/1.1" 304 -
-::1 - - [03/Feb/2026 17:05:25] "GET /fraud_dashboard.html HTTP/1.1" 304 -
+::1 - - [04/Feb/2026 09:39:51] "HEAD /fraud_dashboard.html HTTP/1.1" 200 -
+::1 - - [04/Feb/2026 09:40:04] "GET /fraud_dashboard.html?id=f7ae9632-592a-42a8-bfe8-644a8e4cc319&vscodeBrowserReqId=1770194404904 HTTP/1.1" 200 -
+::1 - - [04/Feb/2026 09:53:09] "GET /fraud_dashboard.html?id=f7ae9632-592a-42a8-bfe8-644a8e4cc319&vscodeBrowserReqId=1770195188955 HTTP/1.1" 200 -
+::1 - - [04/Feb/2026 09:54:14] "GET /fraud_dashboard.html HTTP/1.1" 200 -
+::1 - - [04/Feb/2026 09:54:16] code 404, message File not found
+::1 - - [04/Feb/2026 09:54:16] "GET /favicon.ico HTTP/1.1" 404 -
+::1 - - [04/Feb/2026 09:58:45] code 404, message File not found
+::1 - - [04/Feb/2026 09:58:45] code 404, message File not found
+::1 - - [04/Feb/2026 09:58:45] code 404, message File not found
+::1 - - [04/Feb/2026 09:58:45] "GET /apple-touch-icon.png HTTP/1.1" 404 -
+::1 - - [04/Feb/2026 09:58:45] "GET /favicon.ico HTTP/1.1" 404 -
+::1 - - [04/Feb/2026 09:58:45] "GET /apple-touch-icon-precomposed.png HTTP/1.1" 404 -
+::1 - - [04/Feb/2026 09:58:46] "GET /fraud_dashboard.html HTTP/1.1" 200 -
+hboard.html HTTP/1.1" 304 -
+::1 - - [04/Feb/2026 09:39:46] "GET /fraud_dashboard.html HTTP/1.1" 304 -
+::1 - - [04/Feb/2026 09:39:46] "GET /fraud_dashboard.html HTTP/1.1" 304 -
+::1 - - [04/Feb/2026 09:39:47] "GET /fraud_dashboard.html HTTP/1.1" 304 -
+::1 - - [04/Feb/2026 09:39:47] "GET /fraud_dashboard.html HTTP/1.1" 304 -
+::1 - - [04/Feb/2026 09:39:47] "GET /fraud_dashboard.html HTTP/1.1" 304 -
+::1 - - [04/Feb/2026 09:39:47] "GET /fraud_dashboard.html HTTP/1.1" 304 -
+::1 - - [04/Feb/2026 09:39:47] "GET /fraud_dashboard.html HTTP/1.1" 304 -
+::1 - - [04/Feb/2026 09:39:48] "GET /fraud_dashboard.html HTTP/1.1" 304 -
+::1 - - [04/Feb/2026 09:39:48] "GET /fraud_dashboard.html HTTP/1.1" 304 -
+::1 - - [04/Feb/2026 09:39:48] "GET /fraud_dashboard.html HTTP/1.1" 304 -
+::1 - - [04/Feb/2026 09:39:48] "GET /fraud_dashboard.html HTTP/1.1" 304 -
+::1 - - [04/Feb/2026 09:39:48] "GET /fraud_dashboard.html HTTP/1.1" 304 -
+::1 - - [04/Feb/2026 09:39:49] "GET /fraud_dashboard.html HTTP/1.1" 304 -
+::1 - - [04/Feb/2026 09:39:50] "GET /fraud_dashboard.html HTTP/1.1" 304 -
+::1 - - [04/Feb/2026 09:39:51] "GET /fraud_dashboard.html HTTP/1.1" 304 -
+::1 - - [04/Feb/2026 09:39:51] "GET /fraud_dashboard.html HTTP/1.1" 304 -

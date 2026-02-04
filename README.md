@@ -18,19 +18,61 @@ Architecture de données complète pour plateforme e-commerce avec :
 
 ## 🚀 Démarrage rapide
 
+### ⚡ Méthode PATATOR (Recommandée)
+
+**Un seul mot lance tout !**
+
 ```bash
 # Cloner le projet
 git clone https://github.com/ChevalierPierree/ProjetDataM1JeanPierre.git
 cd ProjetDataM1JeanPierre
 
+# Installer les dépendances
+pip3 install -r requirements.txt
+
+# Lancer TOUT en une commande
+chmod +x patator
+./patator
+```
+
+🎯 **PATATOR** lance automatiquement :
+- ✅ 13 services Docker (Kafka, Flink, PostgreSQL, MongoDB, etc.)
+- ✅ Chargement des données (71,694 événements)
+- ✅ Détection de fraude (10,857 alertes générées)
+- ✅ API Backend (FastAPI sur port 8000)
+- ✅ Dashboard Web (sur port 7600)
+- ✅ Ouvre le dashboard dans le navigateur
+
+**Durée** : 3-5 minutes | **Documentation** : [PATATOR_GUIDE.md](./PATATOR_GUIDE.md)
+
+---
+
+### 🛠️ Méthode manuelle (pour développeurs)
+
+```bash
 # Créer le fichier .env
 cp .env.example .env
 
 # Démarrer les services Docker
 docker compose up -d
 
-# Vérifier que tout fonctionne
-docker compose ps
+# Charger les données
+python3 scripts/load_data_to_postgres.py
+python3 scripts/load_events_to_mongodb.py
+
+# Configurer Kafka
+python3 scripts/create_kafka_topics.py
+python3 scripts/stream_events_to_kafka.py
+
+# Lancer la détection de fraude
+python3 scripts/fraud_detection_realtime.py
+
+# Lancer l'API et le dashboard
+python3 api/fraud_dashboard_api.py &
+cd dashboard && python3 -m http.server 7600 &
+
+# Accéder au dashboard
+open http://localhost:7600/fraud_dashboard.html
 ```
 
 ---
@@ -41,9 +83,12 @@ Toute la documentation se trouve dans le dossier [`markdowns/`](./markdowns/) :
 
 | Document | Description |
 |----------|-------------|
-| [**📖 README Complet**](./markdowns/README.md) | Documentation technique détaillée |
+| [**⚡ PATATOR Guide**](./PATATOR_GUIDE.md) | Script de démarrage automatique (NOUVEAU !) |
+| [**🚀 Quick Start**](./QUICKSTART.md) | Démarrage en 3 commandes |
+| [**🛠️ Installation**](./INSTALLATION.md) | Guide d'installation détaillé |
+| [**� Récap Complet**](./RECAP_COMPLET_PROJET.md) | Vue d'ensemble du projet |
+| [**�📖 README Complet**](./markdowns/README.md) | Documentation technique détaillée |
 | [**🛠️ Stack Technique**](./markdowns/STACK_TECHNIQUE.md) | Justification des choix technologiques |
-| [**🚀 Guide Démarrage**](./markdowns/GUIDE_DEMARRAGE.md) | Guide rapide pour démarrer |
 | [**📊 Récap Avancement**](./markdowns/RECAP_AVANCEMENT.md) | État d'avancement du projet |
 | [**✅ Session Finale**](./markdowns/SESSION_FINALE.md) | Résumé de la session de setup |
 
