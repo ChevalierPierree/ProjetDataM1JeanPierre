@@ -192,6 +192,22 @@
 - ❌ Règles pas implémentées
 - ❌ Modèle ML pas entraîné
 
+### 🚀 Démarrage (MVP fraude)
+
+**Objectif** : simuler une détection temps réel avec règles simples et sorties traçables.
+
+**Plan MVP** :
+1. Producer Kafka `payments` depuis `kivendtout_dataset/payments.csv`
+2. Consumer `fraud_detector.py` applique les règles
+3. Écrit dans PostgreSQL `fraud_alerts`
+4. Émet dans Kafka `fraud-alerts`
+
+**Artefacts** :
+1. `scripts/fraud/producer_payments.py`
+2. `scripts/fraud/fraud_detector.py`
+3. `markdowns/FRAUD_MVP.md`
+
+
 ---
 
 ## 🗄️ PILIER 4 : DATA LAKE & ANALYTICS - CENTRALISATION & BI

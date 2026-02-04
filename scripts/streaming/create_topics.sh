@@ -14,6 +14,7 @@ TOPICS=(
   "payments"
   "orders"
   "cart-events"
+  "fraud-alerts"
 )
 
 echo "Creating Kafka topics on ${BROKER}..."

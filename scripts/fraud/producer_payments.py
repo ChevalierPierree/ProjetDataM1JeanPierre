@@ -1,18 +1,16 @@
 #!/usr/bin/env python3
 """
-Consumer Kafka -> MongoDB
-Lit le topic user-events et insere les documents dans la collection events.
+Producer Kafka - Paiements KiVendTout
+Publie les lignes du fichier payments.csv vers le topic payments.
 """
 
 import argparse
+import csv
 import json
 import os
 import sys
-from datetime import datetime
+import time
 from pathlib import Path
-
-from pymongo import MongoClient
-from pymongo.errors import BulkWriteError
 
 
 def load_dotenv_if_available() -> None:
@@ -170,11 +168,16 @@ def ensure_kafka_vendor_six() -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Kafka consumer to MongoDB")
+    parser = argparse.ArgumentParser(description="Kafka producer for payments.csv")
+    parser.add_argument(
+        "--file",
+        default="kivendtout_dataset/payments.csv",
+        help="Path to payments.csv",
+    )
     parser.add_argument(
         "--topic",
         default=None,
-        help="Kafka topic (default from KAFKA_TOPIC_USER_EVENTS)",
+        help="Kafka topic (default from KAFKA_TOPIC_PAYMENTS)",
     )
     parser.add_argument(
         "--bootstrap",
@@ -182,165 +185,91 @@ def parse_args() -> argparse.Namespace:
         help="Kafka bootstrap servers (default from KAFKA_BOOTSTRAP_SERVERS)",
     )
     parser.add_argument(
-        "--group-id",
-        default="events-to-mongo",
-        help="Kafka consumer group id",
+        "--max-per-second",
+        type=float,
+        default=0.0,
+        help="Throttle rate (0 = no throttle)",
     )
     parser.add_argument(
-        "--from-beginning",
-        action="store_true",
-        help="Consume from earliest offset (new group recommended)",
-    )
-    parser.add_argument(
-        "--batch-size",
-        type=int,
-        default=1000,
-        help="MongoDB insert batch size",
-    )
-    parser.add_argument(
-        "--max-messages",
+        "--limit",
         type=int,
         default=0,
-        help="Stop after N messages (0 = infinite)",
+        help="Max number of events to send (0 = all)",
     )
     parser.add_argument(
-        "--mongo-uri",
-        default=None,
-        help="MongoDB URI (override .env)",
+        "--flush-every",
+        type=int,
+        default=500,
+        help="Flush producer every N messages",
     )
     parser.add_argument(
-        "--mongo-db",
-        default=None,
-        help="MongoDB database name (override .env)",
-    )
-    parser.add_argument(
-        "--mongo-collection",
-        default=None,
-        help="MongoDB collection name (override .env)",
+        "--acks",
+        default="all",
+        help="Kafka acks (0, 1, all). Default: all",
     )
     return parser.parse_args()
-
-
-def parse_timestamp(value: str) -> datetime | None:
-    if not value:
-        return None
-    # Example: 2025-11-19 14:31:02.594554442 (9 digits)
-    if "." in value:
-        base, fraction = value.split(".", 1)
-        fraction = (fraction + "000000")[:6]
-        value = f"{base}.{fraction}"
-    try:
-        return datetime.fromisoformat(value)
-    except ValueError:
-        return None
-
-
-def ensure_indexes(collection) -> None:
-    collection.create_index("customer_id")
-    collection.create_index("session_id")
-    collection.create_index("event_type")
-    # TTL index: keep 2 years
-    collection.create_index("ts", expireAfterSeconds=60 * 60 * 24 * 365 * 2)
 
 
 def main() -> int:
     load_dotenv_if_available()
     args = parse_args()
 
-    topic = args.topic or os.getenv("KAFKA_TOPIC_USER_EVENTS", "user-events")
+    file_path = Path(args.file)
+    if not file_path.exists():
+        print(f"File not found: {file_path}")
+        return 1
+
+    topic = args.topic or os.getenv("KAFKA_TOPIC_PAYMENTS", "payments")
     bootstrap = args.bootstrap or os.getenv(
         "KAFKA_BOOTSTRAP_SERVERS", "localhost:9092,localhost:9093,localhost:9094"
     )
     bootstrap_servers = [s.strip() for s in bootstrap.split(",") if s.strip()]
 
-    mongo_uri = args.mongo_uri or os.getenv("MONGO_URI")
-    mongo_db = args.mongo_db or os.getenv("MONGO_DB")
-    mongo_collection = args.mongo_collection or os.getenv("MONGO_COLLECTION", "events")
-
-    if not mongo_uri:
-        mongo_host = os.getenv("MONGODB_HOST", "localhost")
-        mongo_port = int(os.getenv("MONGODB_PORT", "27017"))
-        mongo_user = os.getenv("MONGODB_USER", "admin")
-        mongo_password = os.getenv("MONGODB_PASSWORD", "admin")
-        mongo_uri = f"mongodb://{mongo_user}:{mongo_password}@{mongo_host}:{mongo_port}"
-
-    if not mongo_db:
-        mongo_db = os.getenv("MONGODB_DB", "kivendtout")
-
-    client = MongoClient(mongo_uri, serverSelectionTimeoutMS=5000)
-
-    try:
-        client.admin.command("ping")
-    except Exception as exc:
-        print("MongoDB connection failed.")
-        print(f"URI used: {mongo_uri}")
-        print("Check that MongoDB is running and credentials match .env.")
-        print(f"Original error: {exc}")
-        return 1
-    collection = client[mongo_db][mongo_collection]
-
-    ensure_indexes(collection)
-
     ensure_kafka_vendor_six()
-    from kafka.consumer import KafkaConsumer
+    from kafka.producer import KafkaProducer
 
-    consumer = KafkaConsumer(
-        topic,
+    producer = KafkaProducer(
         bootstrap_servers=bootstrap_servers,
-        group_id=args.group_id,
-        enable_auto_commit=False,
-        auto_offset_reset="earliest" if args.from_beginning else "latest",
-        value_deserializer=lambda v: json.loads(v.decode("utf-8")),
-        key_deserializer=lambda k: k.decode("utf-8") if k else None,
+        acks=args.acks,
+        key_serializer=lambda k: k.encode("utf-8") if k else None,
+        value_serializer=lambda v: json.dumps(v, ensure_ascii=False).encode("utf-8"),
+        linger_ms=50,
+        retries=5,
     )
 
-    batch = []
     total = 0
+    start_time = time.time()
 
-    try:
-        for message in consumer:
-            doc = message.value
+    throttle_delay = 0.0
+    if args.max_per_second and args.max_per_second > 0:
+        throttle_delay = 1.0 / args.max_per_second
 
-            # Normalize timestamps
-            raw_ts = doc.get("ts")
-            parsed_ts = parse_timestamp(raw_ts) if isinstance(raw_ts, str) else None
-            if parsed_ts:
-                doc["ts_raw"] = raw_ts
-                doc["ts"] = parsed_ts
-
-            # Use event_id as Mongo _id for idempotency
-            if "event_id" in doc:
-                doc["_id"] = doc["event_id"]
-
-            batch.append(doc)
+    with file_path.open("r", encoding="utf-8") as csvfile:
+        reader = csv.DictReader(csvfile)
+        for row in reader:
+            # Keep raw fields; consumer will parse types
+            key = row.get("customer_id") or row.get("payment_id")
+            producer.send(topic, key=key, value=row)
             total += 1
 
-            if len(batch) >= args.batch_size:
-                try:
-                    collection.insert_many(batch, ordered=False)
-                except BulkWriteError:
-                    # Ignore duplicate key errors
-                    pass
-                consumer.commit()
-                batch = []
+            if args.flush_every and total % args.flush_every == 0:
+                producer.flush()
 
-            if args.max_messages and total >= args.max_messages:
+            if throttle_delay > 0:
+                time.sleep(throttle_delay)
+
+            if args.limit and total >= args.limit:
                 break
 
-    except KeyboardInterrupt:
-        pass
-    finally:
-        if batch:
-            try:
-                collection.insert_many(batch, ordered=False)
-            except BulkWriteError:
-                pass
-            consumer.commit()
+    producer.flush()
+    elapsed = time.time() - start_time
+    rate = total / elapsed if elapsed > 0 else 0
 
-        consumer.close()
-        client.close()
+    print("Done.")
+    print(f"Total sent: {total}")
+    print(f"Elapsed: {elapsed:.2f}s")
+    print(f"Rate: {rate:.1f} msg/s")
 
-    print(f"Consumed {total} messages")
     return 0
 
 

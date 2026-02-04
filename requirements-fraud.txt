@@ -1,0 +1,5 @@
+# Minimal dependencies to run fraud MVP scripts
+python-dotenv==1.0.0
+kafka-python==2.0.2
+pg8000==1.30.5
+six==1.16.0

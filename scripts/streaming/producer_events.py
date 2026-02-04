@@ -11,8 +11,159 @@ import sys
 import time
 from pathlib import Path
 
-from dotenv import load_dotenv
-from kafka import KafkaProducer
+
+def load_dotenv_if_available() -> None:
+    try:
+        from dotenv import load_dotenv as _load_dotenv
+    except Exception:
+        try:
+            import dotenv as _dotenv  # type: ignore
+
+            _load_dotenv = getattr(_dotenv, "load_dotenv", None)
+        except Exception:
+            _load_dotenv = None
+
+    if _load_dotenv is None:
+        print(
+            "Warning: python-dotenv not available. Proceeding without loading .env.",
+            file=sys.stderr,
+        )
+        return
+
+    _load_dotenv()
+
+
+def ensure_kafka_vendor_six() -> None:
+    """Patch kafka.vendor.six when kafka-python is missing vendored six."""
+    try:
+        import kafka.vendor.six  # type: ignore  # noqa: F401
+        return
+    except Exception:
+        pass
+
+    try:
+        import six  # type: ignore
+    except Exception as exc:
+        raise RuntimeError(
+            "Missing dependency 'six'. Install it with: python3 -m pip install six"
+        ) from exc
+
+    import sys
+    import types
+
+    vendor_module = types.ModuleType("kafka.vendor")
+    vendor_module.six = six  # type: ignore[attr-defined]
+    sys.modules.setdefault("kafka.vendor", vendor_module)
+    sys.modules["kafka.vendor.six"] = six
+
+    # Ensure kafka.admin.KafkaAdminClient exists (broken kafka-python package on some envs)
+    admin_module = sys.modules.get("kafka.admin")
+    if admin_module is None:
+        admin_module = types.ModuleType("kafka.admin")
+        sys.modules["kafka.admin"] = admin_module
+    if not hasattr(admin_module, "KafkaAdminClient"):
+        class KafkaAdminClient:  # pylint: disable=too-few-public-methods
+            pass
+
+        admin_module.KafkaAdminClient = KafkaAdminClient  # type: ignore[attr-defined]
+
+    # Provide a minimal kafka.metrics.stats module if missing
+    try:
+        import kafka.metrics  # type: ignore  # noqa: F401
+        import kafka.metrics.stats  # type: ignore  # noqa: F401
+    except Exception:
+        metrics_pkg = sys.modules.get("kafka.metrics")
+        if metrics_pkg is None:
+            metrics_pkg = types.ModuleType("kafka.metrics")
+            metrics_pkg.__path__ = []  # mark as package
+            sys.modules["kafka.metrics"] = metrics_pkg
+
+        class MetricConfig:  # pylint: disable=too-few-public-methods
+            def __init__(self, *args, **kwargs):
+                pass
+
+        class KafkaMetric:  # pylint: disable=too-few-public-methods
+            def __init__(self, *args, **kwargs):
+                pass
+
+        class MetricName:  # pylint: disable=too-few-public-methods
+            def __init__(self, *args, **kwargs):
+                pass
+
+        class AnonMeasurable:  # pylint: disable=too-few-public-methods
+            def __init__(self, func):
+                self.func = func
+
+        class Sensor:  # pylint: disable=too-few-public-methods
+            def add(self, *args, **kwargs):
+                return None
+
+            def record(self, *args, **kwargs):
+                return None
+
+        class Metrics:  # pylint: disable=too-few-public-methods
+            def __init__(self, *args, **kwargs):
+                self._sensors = {}
+
+            def sensor(self, name, *args, **kwargs):
+                sensor = self._sensors.get(name)
+                if sensor is None:
+                    sensor = Sensor()
+                    self._sensors[name] = sensor
+                return sensor
+
+            def get_sensor(self, name):
+                return self._sensors.get(name)
+
+            def add_metric(self, *args, **kwargs):
+                return None
+
+            def metric_name(self, name, *args, **kwargs):
+                return name
+
+        metrics_pkg.MetricConfig = MetricConfig
+        metrics_pkg.Metrics = Metrics
+        metrics_pkg.AnonMeasurable = AnonMeasurable
+        metrics_pkg.MetricName = MetricName
+        metrics_pkg.KafkaMetric = KafkaMetric
+
+        measurable_mod = types.ModuleType("kafka.metrics.measurable")
+        measurable_mod.AnonMeasurable = AnonMeasurable
+        sys.modules["kafka.metrics.measurable"] = measurable_mod
+
+        stats_mod = types.ModuleType("kafka.metrics.stats")
+
+        class Avg:  # pylint: disable=too-few-public-methods
+            def __init__(self, *args, **kwargs):
+                pass
+
+        class Count:  # pylint: disable=too-few-public-methods
+            def __init__(self, *args, **kwargs):
+                pass
+
+        class Max:  # pylint: disable=too-few-public-methods
+            def __init__(self, *args, **kwargs):
+                pass
+
+        class Rate:  # pylint: disable=too-few-public-methods
+            def __init__(self, *args, **kwargs):
+                pass
+
+        stats_mod.Avg = Avg
+        stats_mod.Count = Count
+        stats_mod.Max = Max
+        stats_mod.Rate = Rate
+        sys.modules["kafka.metrics.stats"] = stats_mod
+
+        rate_mod = types.ModuleType("kafka.metrics.stats.rate")
+
+        class TimeUnit:  # pylint: disable=too-few-public-methods
+            NANOSECONDS = "nanoseconds"
+            MILLISECONDS = "milliseconds"
+            SECONDS = "seconds"
+
+        rate_mod.TimeUnit = TimeUnit
+        sys.modules["kafka.metrics.stats.rate"] = rate_mod
 
 
 def parse_args() -> argparse.Namespace:
@@ -79,7 +230,7 @@ def read_events(file_path: Path):
 
 
 def main() -> int:
-    load_dotenv()
+    load_dotenv_if_available()
     args = parse_args()
 
     file_path = Path(args.file)
@@ -92,6 +243,9 @@ def main() -> int:
         "KAFKA_BOOTSTRAP_SERVERS", "localhost:9092,localhost:9093,localhost:9094"
     )
     bootstrap_servers = [s.strip() for s in bootstrap.split(",") if s.strip()]
+
+    ensure_kafka_vendor_six()
+    from kafka.producer import KafkaProducer
 
     producer = KafkaProducer(
         bootstrap_servers=bootstrap_servers,
