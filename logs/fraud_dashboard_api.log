@@ -1,147 +1,30 @@
-/Users/jeanmacario/Documents/GitHub/ProjetDataM1JeanPierre/api/fraud_dashboard_api.py:217: DeprecationWarning: 
+/Users/jeanmacario/Documents/GitHub/ProjetDataM1JeanPierre/api/fraud_dashboard_api.py:324: DeprecationWarning: 
         on_event is deprecated, use lifespan event handlers instead.
 
         Read more about it in the
         [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
         
   @app.on_event("startup")
-INFO:     Started server process [54745]
+INFO:     Started server process [81928]
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
 INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
 🚀 Démarrage API Fraud Detection...
 ✅ Table fraud_alerts initialisée
+✅ Table identity_verifications initialisée
 ✅ Initialisation API terminée
-INFO:     127.0.0.1:50031 - "GET /health HTTP/1.1" 200 OK
-Kafka indisponible: No module named 'kafka.vendor.six.moves'
-INFO:     127.0.0.1:50034 - "POST /api/sync HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50037 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50043 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50044 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50053 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50053 - "GET /api/alerts?status=INVESTIGATING&limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50053 - "GET /api/alerts?status=INVESTIGATING&severity=HIGH&limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50053 - "GET /api/alerts?severity=HIGH&limit=50 HTTP/1.1" 200 OK
-Kafka indisponible: No module named 'kafka.vendor.six.moves'
-INFO:     127.0.0.1:50053 - "POST /api/sync HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50053 - "GET /api/alerts?severity=HIGH&limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50060 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50066 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50067 - "GET /api/alerts?severity=HIGH&limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50090 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50091 - "GET /api/alerts?severity=HIGH&limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50109 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50110 - "GET /api/alerts?severity=HIGH&limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50125 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50126 - "GET /api/alerts?severity=HIGH&limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50152 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50153 - "GET /api/alerts?severity=HIGH&limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50167 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50168 - "GET /api/alerts?severity=HIGH&limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50241 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50242 - "GET /api/alerts?severity=HIGH&limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50323 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50324 - "GET /api/alerts?severity=HIGH&limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50371 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50372 - "GET /api/alerts?severity=HIGH&limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50464 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50465 - "GET /api/alerts?severity=HIGH&limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50483 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50490 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50491 - "GET /api/alerts?severity=HIGH&limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50490 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50491 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50516 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50517 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50546 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50547 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50575 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50577 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50597 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50598 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50615 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50616 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50644 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50645 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50691 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50692 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50743 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50744 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50805 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50806 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50976 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50977 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51001 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51002 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51025 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51026 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51073 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51074 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51132 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51133 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51176 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51177 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51245 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51246 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51323 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51324 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51385 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51386 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51429 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51430 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51476 - "GET /health HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51478 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51483 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51484 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51490 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51491 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51513 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51514 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51536 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51537 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51554 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51555 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51579 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51580 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51595 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51596 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51617 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51618 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51641 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51642 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51666 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51667 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51671 - "GET /health HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51673 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51721 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51722 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51766 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51767 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51808 - "GET /health HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51810 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51814 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51815 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51819 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51821 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51832 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51833 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51847 - "GET /health HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51849 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51860 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51861 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51875 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51876 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51895 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51896 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51913 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51914 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51936 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51937 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51995 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:51996 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:52073 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:52074 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:52376 - "GET /api/stats HTTP/1.1" 200 OK
-INFO:     127.0.0.1:52377 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:52473 - "GET /health HTTP/1.1" 200 OK
-INFO:     127.0.0.1:52475 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54750 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54753 - "POST /api/sync HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54762 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54763 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54769 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54776 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54777 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54784 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54785 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54826 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54827 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54831 - "POST /api/sync HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54831 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54839 - "GET /api/stats HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54831 - "GET /api/alerts?limit=50 HTTP/1.1" 200 OK
