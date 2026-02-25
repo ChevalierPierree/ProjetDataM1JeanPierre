@@ -1,0 +1,38 @@
+======================================================================
+🕵️  FRAUD DETECTION ENGINE - KiVendTout
+======================================================================
+
+🔌 Initialisation...
+
+✅ Consumer: topic 'payments'
+✅ Producer: topic 'fraud-alerts'
+✅ PostgreSQL enrichment: activé
+
+🔍 Règles actives (11 règles):
+  BASIQUES:
+    1. FIRST_PAYMENT - Premier paiement (40 pts)
+    2. NEW_CUSTOMER - Client < 7 jours (30 pts)
+    3. UNUSUAL_HOUR - Paiement 2h-6h (35 pts)
+    4. MOBILE_DEVICE - Device mobile (20 pts)
+    5. DIRECT_TRAFFIC - Sans référent (15 pts)
+    6. PAYMENT_FAILED - Échec paiement (50 pts)
+  AVANCÉES:
+    7. VELOCITY_HIGH - 3+ paiements en 10 min (45 pts) 🆕
+    8. NEW_DEVICE - Nouveau device (30 pts) 🆕
+    9. UNUSUAL_AMOUNT - > 3x moyenne (40 pts) 🆕
+   10. FAST_CHECKOUT - Checkout < 30s (35 pts) 🆕
+   11. GEO_MISMATCH - Pays différent (25 pts) 🆕
+
+⚠️  Seuil de fraude: 60 points ou PAYMENT_FAILED
+
+🚀 Démarrage de l'analyse en temps réel...
+
+
+======================================================================
+📊 STATISTIQUES FINALES
+======================================================================
+Événements traités: 0
+Fraudes détectées: 0
+Durée: 10.01s
+======================================================================
+
