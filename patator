@@ -32,6 +32,7 @@ PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_DIR="$PROJECT_DIR/logs"
 API_PORT=8000
 DASHBOARD_PORT=7600
+PYTHON_BIN="python3"
 
 # ============================================================================
 # Fonctions Utilitaires
@@ -73,6 +74,26 @@ check_command() {
         print_error "$1 n'est pas installé"
         return 1
     fi
+}
+
+select_python_bin() {
+    # Priorité 1: venv actif dans le shell appelant
+    if [ -n "${VIRTUAL_ENV:-}" ] && [ -x "$VIRTUAL_ENV/bin/python" ]; then
+        PYTHON_BIN="$VIRTUAL_ENV/bin/python"
+        print_info "Python utilisé (venv actif): $PYTHON_BIN"
+        return 0
+    fi
+
+    # Priorité 2: venv local du projet
+    if [ -x "$PROJECT_DIR/.venv/bin/python" ]; then
+        PYTHON_BIN="$PROJECT_DIR/.venv/bin/python"
+        print_info "Python utilisé (venv projet): $PYTHON_BIN"
+        return 0
+    fi
+
+    # Fallback
+    PYTHON_BIN="python3"
+    print_warning "Aucun venv détecté, fallback sur python3 système"
 }
 
 wait_for_service() {
@@ -219,11 +240,11 @@ load_initial_data() {
     fi
     
     print_step "Chargement PostgreSQL"
-    python3 "$PROJECT_DIR/scripts/load_data_to_postgres.py"
+    "$PYTHON_BIN" "$PROJECT_DIR/scripts/load_data_to_postgres.py"
     print_success "PostgreSQL chargé"
     
     print_step "Chargement MongoDB"
-    python3 "$PROJECT_DIR/scripts/load_events_to_mongodb.py"
+    "$PYTHON_BIN" "$PROJECT_DIR/scripts/load_events_to_mongodb.py"
     print_success "MongoDB chargé"
 }
 
@@ -235,7 +256,7 @@ setup_kafka() {
         print_info "Topics Kafka déjà créés"
     else
         print_step "Création des topics Kafka"
-        python3 "$PROJECT_DIR/scripts/create_kafka_topics.py" || true
+        "$PYTHON_BIN" "$PROJECT_DIR/scripts/create_kafka_topics.py" || true
         print_success "Topics Kafka créés"
     fi
     
@@ -246,7 +267,7 @@ setup_kafka() {
         print_info "Événements déjà streamés dans Kafka ($msg_count messages)"
     else
         print_step "Streaming des événements vers Kafka"
-        python3 "$PROJECT_DIR/scripts/stream_events_to_kafka.py"
+        "$PYTHON_BIN" "$PROJECT_DIR/scripts/stream_events_to_kafka.py"
         print_success "71,694 événements streamés"
     fi
 }
@@ -261,7 +282,7 @@ start_fraud_detection() {
         print_info "Alertes de fraude déjà générées ($alert_count alertes)"
     else
         print_step "Lancement de la détection de fraude"
-        python3 "$PROJECT_DIR/scripts/fraud_detection_realtime.py" > "$LOG_DIR/fraud_detection.log" 2>&1 &
+        "$PYTHON_BIN" "$PROJECT_DIR/scripts/fraud_detection_realtime.py" > "$LOG_DIR/fraud_detection.log" 2>&1 &
         local pid=$!
         
         # Attendre max 60 secondes
@@ -285,7 +306,7 @@ start_api() {
     fi
     
     print_step "Démarrage de l'API FastAPI"
-    python3 "$PROJECT_DIR/api/fraud_dashboard_api.py" > "$LOG_DIR/fraud_dashboard_api.log" 2>&1 &
+    "$PYTHON_BIN" "$PROJECT_DIR/api/fraud_dashboard_api.py" > "$LOG_DIR/fraud_dashboard_api.log" 2>&1 &
     
     wait_for_service "http://localhost:$API_PORT/health" "API Backend"
     
@@ -307,7 +328,7 @@ start_dashboard() {
     
     print_step "Démarrage du serveur HTTP pour le dashboard"
     cd "$PROJECT_DIR/dashboard"
-    python3 -m http.server $DASHBOARD_PORT > "$LOG_DIR/http_server.log" 2>&1 &
+    "$PYTHON_BIN" -m http.server $DASHBOARD_PORT > "$LOG_DIR/http_server.log" 2>&1 &
     
     sleep 2
     wait_for_service "http://localhost:$DASHBOARD_PORT/fraud_dashboard.html" "Dashboard Web"
@@ -318,8 +339,8 @@ show_summary() {
     
     # Récupérer les stats
     local stats=$(curl -s "http://localhost:$API_PORT/api/stats" 2>/dev/null || echo "{}")
-    local total_alerts=$(echo "$stats" | python3 -c "import sys, json; data=json.load(sys.stdin); print(data.get('total_alerts', 'N/A'))" 2>/dev/null || echo "N/A")
-    local fraud_rate=$(echo "$stats" | python3 -c "import sys, json; data=json.load(sys.stdin); print(f\"{data.get('fraud_rate', 0):.2f}%\")" 2>/dev/null || echo "N/A")
+    local total_alerts=$(echo "$stats" | "$PYTHON_BIN" -c "import sys, json; data=json.load(sys.stdin); print(data.get('total_alerts', 'N/A'))" 2>/dev/null || echo "N/A")
+    local fraud_rate=$(echo "$stats" | "$PYTHON_BIN" -c "import sys, json; data=json.load(sys.stdin); print(f\"{data.get('fraud_rate', 0):.2f}%\")" 2>/dev/null || echo "N/A")
     
     echo -e "${GREEN}"
     cat << EOF
@@ -401,6 +422,7 @@ main() {
     
     # Exécution séquentielle
     check_prerequisites
+    select_python_bin
     start_docker_services
     load_initial_data
     setup_kafka

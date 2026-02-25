@@ -13,10 +13,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime, timedelta
-from kafka import KafkaConsumer
 import json
 import psycopg2
 from collections import defaultdict, Counter
+
+try:
+    from kafka import KafkaConsumer
+except Exception as e:
+    KafkaConsumer = None
+    KAFKA_IMPORT_ERROR = e
+else:
+    KAFKA_IMPORT_ERROR = None
 
 app = FastAPI(
     title="KiVendTout Fraud Detection API",
@@ -135,6 +142,10 @@ def sync_alerts_from_kafka(max_messages=1000):
     """
     Synchronise les alertes depuis Kafka vers PostgreSQL
     """
+    if KafkaConsumer is None:
+        print(f"Kafka indisponible: {KAFKA_IMPORT_ERROR}")
+        return 0
+
     try:
         consumer = KafkaConsumer(
             'fraud-alerts',
@@ -208,11 +219,7 @@ async def startup_event():
     """Initialisation au démarrage"""
     print("🚀 Démarrage API Fraud Detection...")
     init_fraud_alerts_table()
-    
-    # Sync initial depuis Kafka
-    print("📥 Synchronisation initiale depuis Kafka...")
-    count = sync_alerts_from_kafka(max_messages=10000)
-    print(f"✅ {count} alertes synchronisées")
+    print("✅ Initialisation API terminée")
 
 @app.get("/")
 async def root():
