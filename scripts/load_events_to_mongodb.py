@@ -15,6 +15,9 @@ import sys
 MONGO_CONFIG = {
     'host': 'localhost',
     'port': 27017,
+    'username': 'admin',
+    'password': 'admin',
+    'auth_source': 'admin',
     'database': 'kivendtout',
     'collection': 'events'
 }
@@ -48,6 +51,9 @@ def get_mongo_client():
         client = MongoClient(
             host=MONGO_CONFIG['host'],
             port=MONGO_CONFIG['port'],
+            username=MONGO_CONFIG['username'],
+            password=MONGO_CONFIG['password'],
+            authSource=MONGO_CONFIG['auth_source'],
             serverSelectionTimeoutMS=5000
         )
         # Test connexion

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Script d'ingestion COMPLET du dataset KiVendTout vers PostgreSQL
-Charge TOUTES les tables : customers, products, sessions, orders, order_items, payments, fraud_alerts
+Charge TOUTES les tables : customers, products, sessions, orders, order_items, payments, fraud_alerts_dataset
 """
 
 import pandas as pd
@@ -427,7 +427,7 @@ def load_payments(conn, csv_path):
     cursor.close()
 
 def load_fraud_alerts(conn, csv_path):
-    """Charge les alertes de fraude - NOUVEAU"""
+    """Charge les alertes de fraude du dataset dans fraud_alerts_dataset"""
     print_info("Chargement des alertes de fraude...")
     
     df = pd.read_csv(csv_path)
@@ -435,55 +435,35 @@ def load_fraud_alerts(conn, csv_path):
     print_info(f"  Colonnes: {list(df.columns)}")
     
     cursor = conn.cursor()
-    cursor.execute("TRUNCATE TABLE fraud_alerts;")
-    
-    # Récupérer payment_ids valides
-    cursor.execute("SELECT payment_id FROM payments;")
-    valid_payments = {row[0] for row in cursor.fetchall()}
-    
+    cursor.execute("TRUNCATE TABLE fraud_alerts_dataset;")
+
     insert_query = """
-        INSERT INTO fraud_alerts (
-            payment_id, alert_date, alert_type, risk_score,
-            action_taken, created_at
+        INSERT INTO fraud_alerts_dataset (
+            alert_id, alert_ts, payment_id, customer_id, session_id,
+            amount, rule_triggered, is_fraud_label, created_at
         )
-        VALUES (%s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
     """
     
     data = []
-    skipped = 0
     
     for _, row in df.iterrows():
-        payment_num = int(row['payment_id'].replace('PAY', ''))
-        
-        if payment_num not in valid_payments:
-            skipped += 1
-            continue
-        
-        # Mapper rule_triggered vers alert_type et risk_score
-        rule = row['rule_triggered']
-        risk_scores = {
-            'high_amount': 0.85,
-            'country_mismatch': 0.75,
-            'velocity': 0.90,
-            'device_change': 0.70
-        }
-        risk_score = risk_scores.get(rule, 0.80)
-        
         data.append((
-            payment_num,
+            row['alert_id'],
             pd.to_datetime(row['alert_ts']),
-            rule,
-            risk_score,
-            'blocked' if row['is_fraud_label'] else 'reviewed',
+            row['payment_id'],
+            row['customer_id'],
+            row['session_id'],
+            float(row['amount']) if pd.notna(row['amount']) else None,
+            row['rule_triggered'],
+            bool(int(row['is_fraud_label'])) if pd.notna(row['is_fraud_label']) else False,
             pd.to_datetime(row['alert_ts'])
         ))
     
     execute_batch(cursor, insert_query, data, page_size=500)
     conn.commit()
     
-    print_success(f"  {len(data)} alertes insérées")
-    if skipped > 0:
-        print_warning(f"  {skipped} alertes ignorées (payment_id invalide)")
+    print_success(f"  {len(data)} alertes dataset insérées")
     
     cursor.close()
 
@@ -508,7 +488,8 @@ def validate_data(conn):
         ('orders', 'Commandes'),
         ('order_items', 'Lignes de commande'),
         ('payments', 'Paiements'),
-        ('fraud_alerts', 'Alertes fraude'),
+        ('fraud_alerts_dataset', 'Alertes fraude (dataset)'),
+        ('fraud_alerts', 'Alertes fraude (temps réel)'),
         ('addresses', 'Adresses')
     ]
     

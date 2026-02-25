@@ -140,7 +140,7 @@ kill_port() {
 # ============================================================================
 
 show_banner() {
-    clear
+    clear 2>/dev/null || true
     echo -e "${PURPLE}"
     cat << "EOF"
     ____  ___  __________  ________________  ____
@@ -202,6 +202,10 @@ start_docker_services() {
         sleep 1
         ((pg_attempts++))
     done
+    if [ $pg_attempts -ge 30 ]; then
+        print_error "PostgreSQL n'a pas démarré après 30s"
+        return 1
+    fi
     
     # Vérifier Kafka
     local kafka_attempts=0
@@ -213,17 +217,31 @@ start_docker_services() {
         sleep 1
         ((kafka_attempts++))
     done
+    if [ $kafka_attempts -ge 30 ]; then
+        print_error "Kafka n'a pas démarré après 30s"
+        return 1
+    fi
     
     print_success "Infrastructure Docker opérationnelle"
 }
 
-check_data_loaded() {
+check_postgres_loaded() {
     print_step "Vérification des données dans PostgreSQL"
-    
-    local count=$(docker compose exec -T postgres psql -U postgres -d kivendtout -c "SELECT COUNT(*) FROM customers;" 2>/dev/null | grep -o '[0-9]*' | head -1)
-    
-    if [ ! -z "$count" ] && [ "$count" -gt 0 ]; then
-        print_success "Données PostgreSQL présentes ($count clients)"
+
+    local customers=$(docker compose exec -T postgres psql -t -A -U postgres -d kivendtout -c "SELECT COUNT(*) FROM customers;" 2>/dev/null | tr -dc '0-9')
+    local orders=$(docker compose exec -T postgres psql -t -A -U postgres -d kivendtout -c "SELECT COUNT(*) FROM orders;" 2>/dev/null | tr -dc '0-9')
+    local payments=$(docker compose exec -T postgres psql -t -A -U postgres -d kivendtout -c "SELECT COUNT(*) FROM payments;" 2>/dev/null | tr -dc '0-9')
+    local alert_schema=$(docker compose exec -T postgres psql -t -A -U postgres -d kivendtout -c "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='fraud_alerts' AND column_name='alert_timestamp';" 2>/dev/null | tr -dc '0-9')
+    local dataset_schema=$(docker compose exec -T postgres psql -t -A -U postgres -d kivendtout -c "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='fraud_alerts_dataset' AND column_name='alert_ts';" 2>/dev/null | tr -dc '0-9')
+
+    customers=${customers:-0}
+    orders=${orders:-0}
+    payments=${payments:-0}
+    alert_schema=${alert_schema:-0}
+    dataset_schema=${dataset_schema:-0}
+
+    if [ "$customers" -gt 0 ] && [ "$orders" -gt 0 ] && [ "$payments" -gt 0 ] && [ "$alert_schema" -gt 0 ] && [ "$dataset_schema" -gt 0 ]; then
+        print_success "Données PostgreSQL présentes ($customers clients, $orders commandes, $payments paiements)"
         return 0
     else
         print_warning "Données PostgreSQL absentes ou incomplètes"
@@ -231,21 +249,42 @@ check_data_loaded() {
     fi
 }
 
+check_mongo_loaded() {
+    print_step "Vérification des données dans MongoDB"
+
+    local mongo_count=$(docker compose exec -T mongodb mongosh --quiet -u admin -p admin --authenticationDatabase admin --eval 'db.getSiblingDB("kivendtout").events.countDocuments()' 2>/dev/null | tail -1 | tr -dc '0-9')
+    mongo_count=${mongo_count:-0}
+
+    if [ "$mongo_count" -gt 0 ]; then
+        print_success "Données MongoDB présentes ($mongo_count événements)"
+        return 0
+    else
+        print_warning "Données MongoDB absentes ou incomplètes"
+        return 1
+    fi
+}
+
 load_initial_data() {
     print_header "3️⃣  CHARGEMENT DES DONNÉES"
     
-    if check_data_loaded; then
-        print_info "Données déjà chargées, skip"
-        return 0
+    if ! check_postgres_loaded; then
+        print_step "Réinitialisation du schéma PostgreSQL"
+        docker compose exec -T postgres psql -U postgres -d kivendtout -f /docker-entrypoint-initdb.d/00_reset_schema.sql > /dev/null
+
+        print_step "Chargement PostgreSQL"
+        "$PYTHON_BIN" "$PROJECT_DIR/scripts/load_complete_data_to_postgres.py"
+        print_success "PostgreSQL chargé"
+    else
+        print_info "PostgreSQL déjà chargé, skip"
     fi
-    
-    print_step "Chargement PostgreSQL"
-    "$PYTHON_BIN" "$PROJECT_DIR/scripts/load_data_to_postgres.py"
-    print_success "PostgreSQL chargé"
-    
-    print_step "Chargement MongoDB"
-    "$PYTHON_BIN" "$PROJECT_DIR/scripts/load_events_to_mongodb.py"
-    print_success "MongoDB chargé"
+
+    if ! check_mongo_loaded; then
+        print_step "Chargement MongoDB"
+        "$PYTHON_BIN" "$PROJECT_DIR/scripts/load_events_to_mongodb.py"
+        print_success "MongoDB chargé"
+    else
+        print_info "MongoDB déjà chargé, skip"
+    fi
 }
 
 setup_kafka() {
@@ -260,23 +299,19 @@ setup_kafka() {
         print_success "Topics Kafka créés"
     fi
     
-    # Vérifier si les événements sont streamés
-    local msg_count=$(docker compose exec -T kafka-1 kafka-run-class kafka.tools.GetOffsetShell --broker-list localhost:9092 --topic payments 2>/dev/null | tail -1 | cut -d':' -f3 || echo "0")
-    
-    if [ "$msg_count" -gt 1000 ]; then
-        print_info "Événements déjà streamés dans Kafka ($msg_count messages)"
-    else
-        print_step "Streaming des événements vers Kafka"
-        "$PYTHON_BIN" "$PROJECT_DIR/scripts/stream_events_to_kafka.py"
-        print_success "71,694 événements streamés"
-    fi
+    # Toujours restreamer pour garantir des messages consommables
+    # (les offsets Kafka ne représentent pas forcément des messages encore présents).
+    print_step "Streaming des événements vers Kafka"
+    "$PYTHON_BIN" "$PROJECT_DIR/scripts/stream_events_to_kafka.py"
+    print_success "71,694 événements streamés"
 }
 
 start_fraud_detection() {
     print_header "5️⃣  DÉTECTION DE FRAUDE"
     
     # Vérifier si des alertes existent déjà
-    local alert_count=$(docker compose exec -T postgres psql -U postgres -d kivendtout -c "SELECT COUNT(*) FROM fraud_alerts;" 2>/dev/null | grep -o '[0-9]*' | head -1 || echo "0")
+    local alert_count=$(docker compose exec -T postgres psql -t -A -U postgres -d kivendtout -c "SELECT COUNT(*) FROM fraud_alerts;" 2>/dev/null | tr -dc '0-9')
+    alert_count=${alert_count:-0}
     
     if [ "$alert_count" -gt 100 ]; then
         print_info "Alertes de fraude déjà générées ($alert_count alertes)"
@@ -291,8 +326,16 @@ start_fraud_detection() {
         if ps -p $pid > /dev/null; then
             kill $pid 2>/dev/null || true
         fi
-        
-        print_success "Détection de fraude terminée"
+
+        local new_count=$(docker compose exec -T postgres psql -t -A -U postgres -d kivendtout -c "SELECT COUNT(*) FROM fraud_alerts;" 2>/dev/null | tr -dc '0-9')
+        new_count=${new_count:-0}
+        if [ "$new_count" -le "$alert_count" ]; then
+            print_error "Aucune nouvelle alerte générée (avant=$alert_count, après=$new_count)"
+            tail -n 60 "$LOG_DIR/fraud_detection.log" || true
+            return 1
+        fi
+
+        print_success "Détection de fraude terminée ($new_count alertes)"
     fi
 }
 
@@ -301,14 +344,21 @@ start_api() {
     
     # Vérifier si l'API tourne déjà
     if check_port $API_PORT; then
-        print_info "API déjà active sur le port $API_PORT"
-        return 0
+        if curl -s "http://localhost:$API_PORT/health" > /dev/null 2>&1; then
+            print_info "API déjà active sur le port $API_PORT"
+            return 0
+        fi
+        print_warning "Port $API_PORT occupé mais API non saine, redémarrage"
+        kill_port $API_PORT
     fi
     
     print_step "Démarrage de l'API FastAPI"
     "$PYTHON_BIN" "$PROJECT_DIR/api/fraud_dashboard_api.py" > "$LOG_DIR/fraud_dashboard_api.log" 2>&1 &
     
-    wait_for_service "http://localhost:$API_PORT/health" "API Backend"
+    wait_for_service "http://localhost:$API_PORT/health" "API Backend" || {
+        tail -n 80 "$LOG_DIR/fraud_dashboard_api.log" || true
+        return 1
+    }
     
     # Sync alertes depuis Kafka
     print_step "Synchronisation des alertes depuis Kafka"
@@ -368,7 +418,7 @@ show_summary() {
    → http://localhost:8083
    
    📈 GRAFANA (Dashboards)
-   → http://localhost:4000
+   → http://localhost:3000
    
    🔥 PROMETHEUS (Metrics)
    → http://localhost:9090

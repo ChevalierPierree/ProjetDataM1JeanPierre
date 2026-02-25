@@ -5,13 +5,45 @@ Analyse les paiements depuis Kafka et détecte les patterns suspects
 """
 
 import json
+import importlib.util
+import site
+import sys
 from datetime import datetime
+from pathlib import Path
 from pyflink.datastream import StreamExecutionEnvironment
 from pyflink.datastream.connectors.kafka import KafkaSource, KafkaOffsetsInitializer, KafkaSink, KafkaRecordSerializationSchema
 from pyflink.common import WatermarkStrategy, Types
 from pyflink.common.serialization import SimpleStringSchema
 from pyflink.datastream.functions import MapFunction, FilterFunction
 import psycopg2
+
+
+def patch_kafka_vendor_six():
+    candidates = []
+    try:
+        candidates.extend(site.getsitepackages())
+    except Exception:
+        pass
+    try:
+        candidates.append(site.getusersitepackages())
+    except Exception:
+        pass
+
+    for base in candidates:
+        six_path = Path(base) / "kafka" / "vendor" / "six.py"
+        if not six_path.exists():
+            continue
+        spec = importlib.util.spec_from_file_location("kafka.vendor.six", six_path)
+        if not spec or not spec.loader:
+            continue
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        sys.modules.setdefault("kafka.vendor.six", module)
+        sys.modules.setdefault("kafka.vendor.six.moves", module.moves)
+        return
+
+
+patch_kafka_vendor_six()
 
 class PaymentEvent:
     """Classe représentant un événement de paiement"""
@@ -52,7 +84,7 @@ class EnrichWithPostgres(MapFunction):
             
             # Récupérer infos client
             self.cursor.execute("""
-                SELECT country, registration_date
+                SELECT country, created_at
                 FROM customers
                 WHERE customer_id = %s
             """, (customer_id,))
@@ -64,9 +96,10 @@ class EnrichWithPostgres(MapFunction):
             
             # Récupérer historique paiements
             self.cursor.execute("""
-                SELECT COUNT(*), SUM(amount)
-                FROM payments
-                WHERE customer_id = %s
+                SELECT COUNT(*), SUM(p.amount)
+                FROM payments p
+                JOIN orders o ON p.order_id = o.order_id
+                WHERE o.customer_id = %s
             """, (customer_id,))
             
             payment_history = self.cursor.fetchone()

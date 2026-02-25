@@ -11,25 +11,50 @@ Version 2.0 avec règles avancées:
 - Fast checkout
 """
 
+import importlib.util
 import json
-from datetime import datetime, timedelta
-from kafka import KafkaConsumer, KafkaProducer
-from collections import defaultdict, Counter
-import psycopg2
+import os
+import site
+import sys
 import time
-
-"""
-Détection de fraude en temps réel (Python simple)
-Alternative à Flink pour démonstration rapide
-Consomme payments depuis Kafka, détecte fraudes, publie dans fraud-alerts
-"""
-
-import json
-from datetime import datetime
-from kafka import KafkaConsumer, KafkaProducer
 from collections import defaultdict
+from datetime import datetime, timedelta
+from pathlib import Path
+
 import psycopg2
-import time
+
+
+def patch_kafka_vendor_six():
+    """
+    Compatibilité Python 3.13 pour kafka-python 2.0.2:
+    expose kafka.vendor.six.moves si absent.
+    """
+    candidates = []
+    try:
+        candidates.extend(site.getsitepackages())
+    except Exception:
+        pass
+    try:
+        candidates.append(site.getusersitepackages())
+    except Exception:
+        pass
+
+    for base in candidates:
+        six_path = Path(base) / "kafka" / "vendor" / "six.py"
+        if not six_path.exists():
+            continue
+        spec = importlib.util.spec_from_file_location("kafka.vendor.six", six_path)
+        if not spec or not spec.loader:
+            continue
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        sys.modules.setdefault("kafka.vendor.six", module)
+        sys.modules.setdefault("kafka.vendor.six.moves", module.moves)
+        return
+
+
+patch_kafka_vendor_six()
+from kafka import KafkaConsumer, KafkaProducer
 
 class FraudDetector:
     """
@@ -69,11 +94,14 @@ class FraudDetector:
             
             # Récupérer infos client avec rollback si erreur
             try:
-                self.cursor.execute("""
-                    SELECT country, registration_date
+                self.cursor.execute(
+                    """
+                    SELECT country, created_at
                     FROM customers
                     WHERE customer_id = %s
-                """, (customer_id,))
+                    """,
+                    (customer_id,),
+                )
                 
                 customer_data = self.cursor.fetchone()
                 if customer_data:
@@ -81,7 +109,7 @@ class FraudDetector:
                     event['customer_registration_date'] = str(customer_data[1])
                     
                     # Calculer si c'est un nouveau client (< 7 jours)
-                    reg_date = customer_data[1]
+                    reg_date = customer_data[1].date() if customer_data[1] else datetime.now().date()
                     days_since_registration = (datetime.now().date() - reg_date).days
                     event['is_new_customer'] = days_since_registration < 7
             except Exception as e:
@@ -90,14 +118,19 @@ class FraudDetector:
             
             # Récupérer historique paiements avec moyenne
             try:
-                self.cursor.execute("""
+                self.cursor.execute(
+                    """
                     SELECT 
-                        COUNT(*), 
-                        COALESCE(SUM(amount), 0),
-                        COALESCE(AVG(amount), 0)
-                    FROM payments
-                    WHERE customer_id = %s AND status = 'success'
-                """, (customer_id,))
+                        COUNT(*),
+                        COALESCE(SUM(p.amount), 0),
+                        COALESCE(AVG(p.amount), 0)
+                    FROM payments p
+                    JOIN orders o ON p.order_id = o.order_id
+                    WHERE o.customer_id = %s
+                      AND p.payment_status = 'success'
+                    """,
+                    (customer_id,),
+                )
                 
                 payment_history = self.cursor.fetchone()
                 if payment_history:
@@ -282,6 +315,45 @@ class FraudDetector:
             'severity': 'HIGH' if risk_score >= 80 else 'MEDIUM' if risk_score >= 60 else 'LOW'
         }
         return alert
+
+    def persist_alert(self, alert):
+        """
+        Persiste l'alerte dans PostgreSQL pour disponibilité immédiate du dashboard.
+        """
+        try:
+            self.cursor.execute(
+                """
+                INSERT INTO fraud_alerts (
+                    alert_id, alert_timestamp, event_timestamp, customer_id,
+                    session_id, event_type, device, utm_source, customer_country,
+                    previous_payments, is_new_customer, fraud_reasons,
+                    risk_score, status, severity
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (alert_id) DO NOTHING
+                """,
+                (
+                    alert['alert_id'],
+                    alert['alert_timestamp'],
+                    alert.get('event_timestamp'),
+                    alert.get('customer_id'),
+                    alert.get('session_id'),
+                    alert.get('event_type'),
+                    alert.get('device'),
+                    alert.get('utm_source'),
+                    alert.get('customer_country'),
+                    alert.get('previous_payments', 0),
+                    alert.get('is_new_customer', False),
+                    ','.join(alert.get('fraud_reasons', [])),
+                    alert.get('risk_score', 0),
+                    alert.get('status', 'PENDING_REVIEW'),
+                    alert.get('severity', 'LOW'),
+                ),
+            )
+            self.pg_conn.commit()
+        except Exception as e:
+            self.pg_conn.rollback()
+            print(f"⚠️  Erreur persist alert: {e}")
     
     def process_event(self, event):
         """
@@ -324,21 +396,30 @@ def run_fraud_detection():
     print("\n🔌 Initialisation...\n")
     
     # Consumer Kafka (topic payments)
+    consumer_group = os.getenv("FRAUD_CONSUMER_GROUP", f"fraud-detector-group-{int(time.time())}")
     consumer = KafkaConsumer(
         'payments',
         bootstrap_servers=['localhost:9092', 'localhost:9093', 'localhost:9094'],
         auto_offset_reset='earliest',
         enable_auto_commit=True,
-        group_id='fraud-detector-group',
+        group_id=consumer_group,
         value_deserializer=lambda x: json.loads(x.decode('utf-8')),
         consumer_timeout_ms=10000  # 10 secondes timeout
     )
     
+    # Compression Kafka: fallback sans compression si lz4 indisponible
+    compression = "lz4"
+    try:
+        import lz4.block  # noqa: F401
+    except Exception:
+        compression = None
+        print("⚠️  lz4 non disponible, compression Kafka désactivée")
+
     # Producer Kafka (topic fraud-alerts)
     producer = KafkaProducer(
         bootstrap_servers=['localhost:9092', 'localhost:9093', 'localhost:9094'],
         value_serializer=lambda v: json.dumps(v).encode('utf-8'),
-        compression_type='lz4',
+        compression_type=compression,
         acks='all'
     )
     
@@ -375,6 +456,8 @@ def run_fraud_detection():
             fraud_alert = detector.process_event(event)
             
             if fraud_alert:
+                detector.persist_alert(fraud_alert)
+
                 # Publier dans fraud-alerts
                 producer.send('fraud-alerts', value=fraud_alert)
                 

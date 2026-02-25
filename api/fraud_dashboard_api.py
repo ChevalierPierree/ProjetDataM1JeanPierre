@@ -13,10 +13,44 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime, timedelta
+import importlib.util
 import json
 import psycopg2
+import site
+import sys
+from pathlib import Path
 from collections import defaultdict, Counter
 
+
+def patch_kafka_vendor_six():
+    """
+    Compatibilité Python 3.13 pour kafka-python 2.0.2.
+    """
+    candidates = []
+    try:
+        candidates.extend(site.getsitepackages())
+    except Exception:
+        pass
+    try:
+        candidates.append(site.getusersitepackages())
+    except Exception:
+        pass
+
+    for base in candidates:
+        six_path = Path(base) / "kafka" / "vendor" / "six.py"
+        if not six_path.exists():
+            continue
+        spec = importlib.util.spec_from_file_location("kafka.vendor.six", six_path)
+        if not spec or not spec.loader:
+            continue
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        sys.modules.setdefault("kafka.vendor.six", module)
+        sys.modules.setdefault("kafka.vendor.six.moves", module.moves)
+        return
+
+
+patch_kafka_vendor_six()
 try:
     from kafka import KafkaConsumer
 except Exception as e:
@@ -47,7 +81,7 @@ app.add_middleware(
 class FraudAlert(BaseModel):
     alert_id: str
     alert_timestamp: str
-    event_timestamp: str
+    event_timestamp: Optional[str] = None
     customer_id: str
     session_id: str
     event_type: str
@@ -98,6 +132,22 @@ def init_fraud_alerts_table():
     """
     conn = get_db_connection()
     cursor = conn.cursor()
+
+    # Migration défensive: si une ancienne table fraud_alerts existe avec
+    # le schéma dataset (sans alert_timestamp), on la renomme.
+    cursor.execute("""
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'fraud_alerts'
+    """)
+    existing_columns = {row[0] for row in cursor.fetchall()}
+    if existing_columns and 'alert_timestamp' not in existing_columns:
+        cursor.execute("SELECT to_regclass('public.fraud_alerts_legacy')")
+        if cursor.fetchone()[0] is not None:
+            cursor.execute("DROP TABLE fraud_alerts_legacy")
+        cursor.execute("ALTER TABLE fraud_alerts RENAME TO fraud_alerts_legacy")
+        print("⚠️ Ancienne table fraud_alerts renommée en fraud_alerts_legacy")
     
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS fraud_alerts (
@@ -375,19 +425,11 @@ async def get_stats():
     cursor.execute("SELECT status, COUNT(*) FROM fraud_alerts GROUP BY status")
     alerts_by_status = dict(cursor.fetchall())
     
-    # Fraud rate : calcul correct
-    # On estime qu'on a traité environ 7,563 paiements (d'après Kafka)
-    # Le taux de fraude = (alertes détectées / paiements traités) * 100
-    # Note: Si la table payments est vide, on utilise le nombre d'alertes comme estimation minimale
+    # Fraud rate = alertes / paiements connus
     cursor.execute("SELECT COUNT(*) FROM payments")
     total_payments = cursor.fetchone()[0]
-    
-    # Si peu de données en base, on utilise une estimation réaliste
-    if total_payments < total_alerts:
-        # On estime 7,563 paiements traités d'après les logs Kafka
-        total_payments = 7563
-    
-    fraud_rate = round((total_alerts / total_payments) * 100, 2) if total_payments > 0 else 0
+    base = total_payments if total_payments > 0 else max(total_alerts, 1)
+    fraud_rate = round((total_alerts / base) * 100, 2)
     
     # Top fraud reasons
     cursor.execute("SELECT fraud_reasons FROM fraud_alerts")

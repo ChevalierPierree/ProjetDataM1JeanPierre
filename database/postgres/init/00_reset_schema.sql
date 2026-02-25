@@ -5,6 +5,7 @@
 
 -- Supprimer toutes les tables existantes
 DROP TABLE IF EXISTS fraud_alerts CASCADE;
+DROP TABLE IF EXISTS fraud_alerts_dataset CASCADE;
 DROP TABLE IF EXISTS identity_verifications CASCADE;
 DROP TABLE IF EXISTS payments CASCADE;
 DROP TABLE IF EXISTS order_items CASCADE;
@@ -111,14 +112,41 @@ CREATE TABLE payments (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Table des alertes de fraude (fraud_alerts.csv)
+-- Table des alertes du dataset (fraud_alerts.csv)
+-- Conservée séparément pour éviter le conflit de schéma avec les alertes temps réel
+CREATE TABLE fraud_alerts_dataset (
+    alert_id VARCHAR(50) PRIMARY KEY,
+    alert_ts TIMESTAMP NOT NULL,
+    payment_id VARCHAR(50),  -- PAY0000001
+    customer_id VARCHAR(50),
+    session_id VARCHAR(50),
+    amount NUMERIC(10, 2),
+    rule_triggered VARCHAR(100),
+    is_fraud_label BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Table des alertes temps réel (API/dashboard)
 CREATE TABLE fraud_alerts (
-    alert_id SERIAL PRIMARY KEY,
-    payment_id INTEGER NOT NULL REFERENCES payments(payment_id),
-    alert_date TIMESTAMP NOT NULL,
-    alert_type VARCHAR(100),  -- high_amount, country_mismatch, velocity, device_change
-    risk_score NUMERIC(3, 2) CHECK (risk_score BETWEEN 0 AND 1),
-    action_taken VARCHAR(50),  -- blocked, reviewed, approved
+    alert_id VARCHAR(100) PRIMARY KEY,
+    alert_timestamp TIMESTAMP NOT NULL,
+    event_timestamp TIMESTAMP,
+    customer_id VARCHAR(20),
+    session_id VARCHAR(50),
+    event_type VARCHAR(50),
+    device VARCHAR(50),
+    utm_source VARCHAR(50),
+    customer_country VARCHAR(10),
+    previous_payments INT,
+    is_new_customer BOOLEAN,
+    fraud_reasons TEXT,
+    risk_score INT,
+    status VARCHAR(20) DEFAULT 'PENDING_REVIEW',
+    severity VARCHAR(10),
+    decision VARCHAR(20),
+    decided_at TIMESTAMP,
+    decided_by VARCHAR(100),
+    notes TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -159,8 +187,13 @@ CREATE INDEX idx_payments_order ON payments(order_id);
 CREATE INDEX idx_payments_fraudulent ON payments(is_fraudulent);
 CREATE INDEX idx_payments_date ON payments(payment_date);
 
-CREATE INDEX idx_fraud_alerts_payment ON fraud_alerts(payment_id);
-CREATE INDEX idx_fraud_alerts_date ON fraud_alerts(alert_date);
+CREATE INDEX idx_fraud_alerts_dataset_payment ON fraud_alerts_dataset(payment_id);
+CREATE INDEX idx_fraud_alerts_dataset_ts ON fraud_alerts_dataset(alert_ts);
+
+CREATE INDEX idx_fraud_alerts_status ON fraud_alerts(status);
+CREATE INDEX idx_fraud_alerts_severity ON fraud_alerts(severity);
+CREATE INDEX idx_fraud_alerts_customer ON fraud_alerts(customer_id);
+CREATE INDEX idx_fraud_alerts_timestamp ON fraud_alerts(alert_timestamp);
 
 -- ============================================================================
 -- VUES ANALYTIQUES
@@ -202,12 +235,12 @@ SELECT
     p.is_fraudulent,
     c.customer_id,
     c.country as customer_country,
-    COUNT(fa.alert_id) as nb_alerts
+    COUNT(fad.alert_id) as nb_alerts
 FROM payments p
 JOIN orders o ON p.order_id = o.order_id
 JOIN customers c ON o.customer_id = c.customer_id
-LEFT JOIN fraud_alerts fa ON p.payment_id = fa.payment_id
-WHERE p.is_fraudulent = TRUE OR fa.alert_id IS NOT NULL
+LEFT JOIN fraud_alerts_dataset fad ON p.transaction_id = fad.payment_id
+WHERE p.is_fraudulent = TRUE OR fad.alert_id IS NOT NULL
 GROUP BY p.payment_id, p.payment_date, p.amount, p.payment_method, p.is_fraudulent, c.customer_id, c.country
 ORDER BY p.payment_date DESC;
 
@@ -254,8 +287,8 @@ GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO postgres;
 DO $$
 BEGIN
     RAISE NOTICE '✓ Schéma KiVendTout créé avec succès';
-    RAISE NOTICE '  - 8 tables créées';
-    RAISE NOTICE '  - 12 index créés';
+    RAISE NOTICE '  - 9 tables créées';
+    RAISE NOTICE '  - 16 index créés';
     RAISE NOTICE '  - 3 vues analytiques créées';
     RAISE NOTICE '  - Prêt pour ingestion des données';
 END $$;

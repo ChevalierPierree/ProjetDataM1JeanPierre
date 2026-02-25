@@ -3,11 +3,42 @@
 Consumer Kafka - Consommation et analyse des événements en temps réel
 """
 
+import importlib.util
 import json
+import site
 import sys
-from kafka import KafkaConsumer
-from collections import defaultdict, Counter
+from collections import Counter, defaultdict
 from datetime import datetime
+from pathlib import Path
+
+
+def patch_kafka_vendor_six():
+    candidates = []
+    try:
+        candidates.extend(site.getsitepackages())
+    except Exception:
+        pass
+    try:
+        candidates.append(site.getusersitepackages())
+    except Exception:
+        pass
+
+    for base in candidates:
+        six_path = Path(base) / "kafka" / "vendor" / "six.py"
+        if not six_path.exists():
+            continue
+        spec = importlib.util.spec_from_file_location("kafka.vendor.six", six_path)
+        if not spec or not spec.loader:
+            continue
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        sys.modules.setdefault("kafka.vendor.six", module)
+        sys.modules.setdefault("kafka.vendor.six.moves", module.moves)
+        return
+
+
+patch_kafka_vendor_six()
+from kafka import KafkaConsumer
 
 def consume_events(topic='user-events', max_messages=100):
     """

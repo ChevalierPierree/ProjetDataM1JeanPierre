@@ -3,8 +3,39 @@
 Script de création des topics Kafka pour KiVendTout
 """
 
+import importlib.util
+import site
 import sys
 import time
+from pathlib import Path
+
+
+def patch_kafka_vendor_six():
+    candidates = []
+    try:
+        candidates.extend(site.getsitepackages())
+    except Exception:
+        pass
+    try:
+        candidates.append(site.getusersitepackages())
+    except Exception:
+        pass
+
+    for base in candidates:
+        six_path = Path(base) / "kafka" / "vendor" / "six.py"
+        if not six_path.exists():
+            continue
+        spec = importlib.util.spec_from_file_location("kafka.vendor.six", six_path)
+        if not spec or not spec.loader:
+            continue
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        sys.modules.setdefault("kafka.vendor.six", module)
+        sys.modules.setdefault("kafka.vendor.six.moves", module.moves)
+        return
+
+
+patch_kafka_vendor_six()
 from kafka.admin import KafkaAdminClient, NewTopic
 from kafka.errors import TopicAlreadyExistsError, NoBrokersAvailable
 

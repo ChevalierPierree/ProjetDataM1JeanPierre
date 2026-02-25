@@ -4,11 +4,45 @@ Producer Kafka - Streaming des événements KiVendTout vers Kafka
 Simule un flux d'événements en temps réel
 """
 
+import importlib.util
 import json
-import time
+import os
+import site
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
+
+
+def patch_kafka_vendor_six():
+    """
+    Compatibilité Python 3.13 pour kafka-python 2.0.2.
+    """
+    candidates = []
+    try:
+        candidates.extend(site.getsitepackages())
+    except Exception:
+        pass
+    try:
+        candidates.append(site.getusersitepackages())
+    except Exception:
+        pass
+
+    for base in candidates:
+        six_path = Path(base) / "kafka" / "vendor" / "six.py"
+        if not six_path.exists():
+            continue
+        spec = importlib.util.spec_from_file_location("kafka.vendor.six", six_path)
+        if not spec or not spec.loader:
+            continue
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        sys.modules.setdefault("kafka.vendor.six", module)
+        sys.modules.setdefault("kafka.vendor.six.moves", module.moves)
+        return
+
+
+patch_kafka_vendor_six()
 from kafka import KafkaProducer
 from kafka.errors import NoBrokersAvailable
 
@@ -17,6 +51,12 @@ def create_producer(max_retries=5):
     Crée un producer Kafka avec retry et configuration optimale
     """
     retry_delay = 2
+    compression = "lz4"
+    try:
+        import lz4.block  # noqa: F401
+    except Exception:
+        compression = None
+        print("⚠️  lz4 non disponible, compression Kafka désactivée")
     
     for attempt in range(max_retries):
         try:
@@ -25,7 +65,7 @@ def create_producer(max_retries=5):
                 bootstrap_servers=['localhost:9092', 'localhost:9093', 'localhost:9094'],
                 value_serializer=lambda v: json.dumps(v).encode('utf-8'),
                 key_serializer=lambda k: k.encode('utf-8') if k else None,
-                compression_type='lz4',
+                compression_type=compression,
                 acks='all',  # Attendre confirmation de tous les réplicas
                 retries=3,
                 max_in_flight_requests_per_connection=5,
@@ -179,8 +219,9 @@ if __name__ == '__main__':
         sys.exit(1)
     
     # Options de streaming
-    SPEED_MULTIPLIER = 0  # 0 = pas de délai, streaming le plus rapide possible
-    MAX_EVENTS = None  # None = tous les événements, ou un nombre pour limiter
+    SPEED_MULTIPLIER = int(os.getenv("STREAM_SPEED_MULTIPLIER", "0"))
+    max_events_env = os.getenv("STREAM_MAX_EVENTS")
+    MAX_EVENTS = int(max_events_env) if max_events_env else None
     
     print("="*70)
     print("🎬 KAFKA EVENT STREAMING - KiVendTout")
