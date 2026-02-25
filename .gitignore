@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+.venv_patator/
+venv/
+
+# Local env/config
+.env
+.env.local
+
+# Logs and runtime artifacts
+logs/*.log
+logs/*.pid
+
+# Editor/OS
+.DS_Store
+.idea/
+.vscode/
+
+# Project docs workspace requested to ignore
+markdowns/

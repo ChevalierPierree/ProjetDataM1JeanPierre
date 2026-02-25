@@ -194,6 +194,9 @@ CREATE INDEX idx_fraud_alerts_status ON fraud_alerts(status);
 CREATE INDEX idx_fraud_alerts_severity ON fraud_alerts(severity);
 CREATE INDEX idx_fraud_alerts_customer ON fraud_alerts(customer_id);
 CREATE INDEX idx_fraud_alerts_timestamp ON fraud_alerts(alert_timestamp);
+CREATE INDEX idx_identity_verif_customer ON identity_verifications(customer_id);
+CREATE INDEX idx_identity_verif_status ON identity_verifications(verification_status);
+CREATE INDEX idx_identity_verif_created_at ON identity_verifications(created_at);
 
 -- ============================================================================
 -- VUES ANALYTIQUES
@@ -287,8 +290,8 @@ GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO postgres;
 DO $$
 BEGIN
     RAISE NOTICE '✓ Schéma KiVendTout créé avec succès';
-    RAISE NOTICE '  - 9 tables créées';
-    RAISE NOTICE '  - 16 index créés';
+    RAISE NOTICE '  - 10 tables créées';
+    RAISE NOTICE '  - 23 index créés';
     RAISE NOTICE '  - 3 vues analytiques créées';
     RAISE NOTICE '  - Prêt pour ingestion des données';
 END $$;

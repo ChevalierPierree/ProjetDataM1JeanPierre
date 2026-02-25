@@ -112,6 +112,30 @@ class FraudStats(BaseModel):
     alerts_by_hour: List[dict]
     alerts_by_day: List[dict]
 
+class IdentityVerificationRecord(BaseModel):
+    verification_id: int
+    customer_id: str
+    verification_date: str
+    document_type: Optional[str] = None
+    document_number: Optional[str] = None
+    verification_status: Optional[str] = None
+    verification_method: Optional[str] = None
+    id_card_image_path: Optional[str] = None
+    created_at: Optional[str] = None
+
+class IdentityVerificationRequest(BaseModel):
+    customer_id: str
+    document_number: str
+    document_type: str = "national_id"
+    verification_method: str = "manual"
+    is_adult: Optional[bool] = None
+    id_card_image_path: Optional[str] = None
+
+class IdentityStats(BaseModel):
+    total_verifications: int
+    by_status: dict
+    by_method: dict
+
 # ============================================================================
 # DATABASE
 # ============================================================================
@@ -183,6 +207,34 @@ def init_fraud_alerts_table():
     cursor.close()
     conn.close()
     print("✅ Table fraud_alerts initialisée")
+
+def init_identity_verifications_table():
+    """Crée la table identity_verifications si elle n'existe pas."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS identity_verifications (
+            verification_id SERIAL PRIMARY KEY,
+            customer_id VARCHAR(50) NOT NULL,
+            verification_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            document_type VARCHAR(50),
+            document_number VARCHAR(100),
+            verification_status VARCHAR(50),
+            verification_method VARCHAR(50),
+            id_card_image_path VARCHAR(255),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_identity_verif_customer ON identity_verifications(customer_id);
+        CREATE INDEX IF NOT EXISTS idx_identity_verif_status ON identity_verifications(verification_status);
+        CREATE INDEX IF NOT EXISTS idx_identity_verif_created_at ON identity_verifications(created_at);
+    """)
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+    print("✅ Table identity_verifications initialisée")
 
 # ============================================================================
 # KAFKA CONSUMER (Background sync)
@@ -269,6 +321,7 @@ async def startup_event():
     """Initialisation au démarrage"""
     print("🚀 Démarrage API Fraud Detection...")
     init_fraud_alerts_table()
+    init_identity_verifications_table()
     print("✅ Initialisation API terminée")
 
 @app.get("/")
@@ -280,6 +333,8 @@ async def root():
         "endpoints": {
             "alerts": "/api/alerts",
             "alert_detail": "/api/alerts/{alert_id}",
+            "identity_verify": "/api/verify-id",
+            "identity_stats": "/api/identity/stats",
             "stats": "/api/stats",
             "sync": "/api/sync"
         }
@@ -476,6 +531,125 @@ async def get_stats():
         top_fraud_reasons=top_fraud_reasons,
         alerts_by_hour=alerts_by_hour,
         alerts_by_day=alerts_by_day
+    )
+
+@app.get("/api/identity/verifications", response_model=List[IdentityVerificationRecord])
+async def get_identity_verifications(
+    status: Optional[str] = Query(None, description="Filter by status: pending, verified, rejected"),
+    customer_id: Optional[str] = Query(None),
+    limit: int = Query(100, ge=1, le=1000),
+    offset: int = Query(0, ge=0)
+):
+    """Liste les vérifications d'identité avec filtres."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    query = "SELECT * FROM identity_verifications WHERE 1=1"
+    params = []
+
+    if status:
+        query += " AND verification_status = %s"
+        params.append(status)
+
+    if customer_id:
+        query += " AND customer_id = %s"
+        params.append(customer_id)
+
+    query += " ORDER BY verification_date DESC LIMIT %s OFFSET %s"
+    params.extend([limit, offset])
+
+    cursor.execute(query, params)
+    columns = [desc[0] for desc in cursor.description]
+    results = []
+    for row in cursor.fetchall():
+        item = dict(zip(columns, row))
+        item['verification_date'] = str(item['verification_date']) if item['verification_date'] else None
+        item['created_at'] = str(item['created_at']) if item['created_at'] else None
+        results.append(item)
+
+    cursor.close()
+    conn.close()
+    return results
+
+@app.post("/api/verify-id")
+async def verify_identity(payload: IdentityVerificationRequest):
+    """Enregistre une vérification d'identité manuelle/API."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT 1 FROM customers WHERE customer_id = %s", (payload.customer_id,))
+    if not cursor.fetchone():
+        cursor.close()
+        conn.close()
+        raise HTTPException(status_code=404, detail="Customer not found")
+
+    if payload.is_adult is True:
+        verification_status = "verified"
+    elif payload.is_adult is False:
+        verification_status = "rejected"
+    else:
+        verification_status = "pending"
+
+    cursor.execute("""
+        INSERT INTO identity_verifications (
+            customer_id, verification_date, document_type, document_number,
+            verification_status, verification_method, id_card_image_path, created_at
+        )
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        RETURNING verification_id
+    """, (
+        payload.customer_id,
+        datetime.now(),
+        payload.document_type,
+        payload.document_number,
+        verification_status,
+        payload.verification_method,
+        payload.id_card_image_path,
+        datetime.now()
+    ))
+
+    verification_id = cursor.fetchone()[0]
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    return {
+        "message": "Identity verification saved",
+        "verification_id": verification_id,
+        "customer_id": payload.customer_id,
+        "verification_status": verification_status
+    }
+
+@app.get("/api/identity/stats", response_model=IdentityStats)
+async def get_identity_stats():
+    """Statistiques des vérifications d'identité."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT COUNT(*) FROM identity_verifications")
+    total_verifications = cursor.fetchone()[0]
+
+    cursor.execute("""
+        SELECT COALESCE(verification_status, 'unknown'), COUNT(*)
+        FROM identity_verifications
+        GROUP BY verification_status
+    """)
+    by_status = dict(cursor.fetchall())
+
+    cursor.execute("""
+        SELECT COALESCE(verification_method, 'unknown'), COUNT(*)
+        FROM identity_verifications
+        GROUP BY verification_method
+    """)
+    by_method = dict(cursor.fetchall())
+
+    cursor.close()
+    conn.close()
+
+    return IdentityStats(
+        total_verifications=total_verifications,
+        by_status=by_status,
+        by_method=by_method
     )
 
 @app.post("/api/sync")

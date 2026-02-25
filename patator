@@ -231,17 +231,19 @@ check_postgres_loaded() {
     local customers=$(docker compose exec -T postgres psql -t -A -U postgres -d kivendtout -c "SELECT COUNT(*) FROM customers;" 2>/dev/null | tr -dc '0-9')
     local orders=$(docker compose exec -T postgres psql -t -A -U postgres -d kivendtout -c "SELECT COUNT(*) FROM orders;" 2>/dev/null | tr -dc '0-9')
     local payments=$(docker compose exec -T postgres psql -t -A -U postgres -d kivendtout -c "SELECT COUNT(*) FROM payments;" 2>/dev/null | tr -dc '0-9')
+    local idv=$(docker compose exec -T postgres psql -t -A -U postgres -d kivendtout -c "SELECT COUNT(*) FROM identity_verifications;" 2>/dev/null | tr -dc '0-9')
     local alert_schema=$(docker compose exec -T postgres psql -t -A -U postgres -d kivendtout -c "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='fraud_alerts' AND column_name='alert_timestamp';" 2>/dev/null | tr -dc '0-9')
     local dataset_schema=$(docker compose exec -T postgres psql -t -A -U postgres -d kivendtout -c "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='fraud_alerts_dataset' AND column_name='alert_ts';" 2>/dev/null | tr -dc '0-9')
 
     customers=${customers:-0}
     orders=${orders:-0}
     payments=${payments:-0}
+    idv=${idv:-0}
     alert_schema=${alert_schema:-0}
     dataset_schema=${dataset_schema:-0}
 
-    if [ "$customers" -gt 0 ] && [ "$orders" -gt 0 ] && [ "$payments" -gt 0 ] && [ "$alert_schema" -gt 0 ] && [ "$dataset_schema" -gt 0 ]; then
-        print_success "Données PostgreSQL présentes ($customers clients, $orders commandes, $payments paiements)"
+    if [ "$customers" -gt 0 ] && [ "$orders" -gt 0 ] && [ "$payments" -gt 0 ] && [ "$idv" -gt 0 ] && [ "$alert_schema" -gt 0 ] && [ "$dataset_schema" -gt 0 ]; then
+        print_success "Données PostgreSQL présentes ($customers clients, $orders commandes, $payments paiements, $idv vérifications ID)"
         return 0
     else
         print_warning "Données PostgreSQL absentes ou incomplètes"

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
 Script d'ingestion COMPLET du dataset KiVendTout vers PostgreSQL
-Charge TOUTES les tables : customers, products, sessions, orders, order_items, payments, fraud_alerts_dataset
+Charge TOUTES les tables : customers, products, sessions, identity_verifications,
+orders, order_items, payments, fraud_alerts_dataset
 """
 
 import pandas as pd
@@ -426,6 +427,66 @@ def load_payments(conn, csv_path):
     
     cursor.close()
 
+def load_identity_verifications(conn, csv_path):
+    """Charge les labels de cartes d'identité dans identity_verifications"""
+    print_info("Chargement des vérifications d'identité...")
+
+    df = pd.read_csv(csv_path)
+    print_info(f"  {len(df)} vérifications trouvées dans le CSV")
+    print_info(f"  Colonnes: {list(df.columns)}")
+
+    cursor = conn.cursor()
+    cursor.execute("TRUNCATE TABLE identity_verifications CASCADE;")
+
+    cursor.execute("SELECT customer_id FROM customers ORDER BY customer_id;")
+    customer_ids = [row[0] for row in cursor.fetchall()]
+    if not customer_ids:
+        raise RuntimeError("Aucun customer_id disponible pour charger les vérifications d'identité")
+
+    insert_query = """
+        INSERT INTO identity_verifications (
+            customer_id, verification_date, document_type, document_number,
+            verification_status, verification_method, id_card_image_path, created_at
+        )
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+    """
+
+    data = []
+    adults = 0
+    minors = 0
+    now = datetime.now()
+
+    for idx, row in df.iterrows():
+        customer_id = customer_ids[idx % len(customer_ids)]
+        is_adult = bool(int(row['is_adult'])) if pd.notna(row['is_adult']) else None
+        if is_adult is True:
+            status = 'verified'
+            adults += 1
+        elif is_adult is False:
+            status = 'rejected'
+            minors += 1
+        else:
+            status = 'pending'
+
+        data.append((
+            customer_id,
+            now,
+            'national_id',
+            row['doc_number'],
+            status,
+            'ai',
+            f"synthetic_id_cards/{row['file']}",
+            now
+        ))
+
+    execute_batch(cursor, insert_query, data, page_size=200)
+    conn.commit()
+
+    print_success(f"  {len(data)} vérifications insérées")
+    print_info(f"  Adultes: {adults} | Mineurs: {minors}")
+
+    cursor.close()
+
 def load_fraud_alerts(conn, csv_path):
     """Charge les alertes de fraude du dataset dans fraud_alerts_dataset"""
     print_info("Chargement des alertes de fraude...")
@@ -485,6 +546,7 @@ def validate_data(conn):
         ('customers', 'Clients'),
         ('products', 'Produits'),
         ('sessions', 'Sessions'),
+        ('identity_verifications', 'Vérifications identité'),
         ('orders', 'Commandes'),
         ('order_items', 'Lignes de commande'),
         ('payments', 'Paiements'),
@@ -610,6 +672,7 @@ def main():
         load_customers(conn, DATASET_DIR / 'customers.csv')
         load_products(conn, DATASET_DIR / 'products.csv')
         load_sessions(conn, DATASET_DIR / 'sessions.csv')
+        load_identity_verifications(conn, DATASET_DIR / 'synthetic_id_labels.csv')
         
         print("\n" + "-"*70)
         print(f"{Color.BOLD}PHASE 2 : Tables transactionnelles{Color.END}")
