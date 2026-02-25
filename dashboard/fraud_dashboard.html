@@ -71,6 +71,12 @@
             color: #667eea;
         }
 
+        .kpi-note {
+            font-size: 0.75em;
+            color: #999;
+            margin-top: 5px;
+        }
+
         .filters {
             background: white;
             padding: 20px;
@@ -307,22 +313,46 @@
             <div class="stat-card">
                 <h3>📊 Total Alertes</h3>
                 <div class="value" id="total-alerts">-</div>
-                <p style="font-size: 0.75em; color: #999; margin-top: 5px;">Règles de fraude déclenchées</p>
+                <p class="kpi-note">Règles de fraude déclenchées</p>
             </div>
             <div class="stat-card">
                 <h3>🚨 Taux de Fraude Paiements</h3>
                 <div class="value" id="fraud-rate">-%</div>
-                <p style="font-size: 0.75em; color: #999; margin-top: 5px;" id="fraud-rate-note">Paiements frauduleux / Paiements traités</p>
+                <p class="kpi-note" id="fraud-rate-note">Paiements frauduleux / Paiements traités</p>
             </div>
             <div class="stat-card">
                 <h3>💸 Paiements Frauduleux</h3>
                 <div class="value" id="fraud-payments" style="color: #e74c3c;">-</div>
-                <p style="font-size: 0.75em; color: #999; margin-top: 5px;" id="fraud-coverage-note">Clients alertés / Clients totaux</p>
+                <p class="kpi-note" id="fraud-coverage-note">Clients alertés / Clients totaux</p>
             </div>
             <div class="stat-card">
                 <h3>⏳ En Attente</h3>
                 <div class="value" id="pending-review" style="color: #f39c12;">-</div>
-                <p style="font-size: 0.75em; color: #999; margin-top: 5px;" id="high-severity-note">dont sévérité haute: 0</p>
+                <p class="kpi-note" id="high-severity-note">dont sévérité haute: 0</p>
+            </div>
+        </div>
+
+        <!-- Checkout & Age Guard Stats -->
+        <div class="stats-grid" id="checkout-stats-grid" style="margin-top: -10px;">
+            <div class="stat-card">
+                <h3>🛒 Tentatives Checkout API (24h)</h3>
+                <div class="value" id="checkout-attempts" style="color: #2c3e50;">-</div>
+                <p class="kpi-note" id="checkout-last-attempt">Dernière tentative: -</p>
+            </div>
+            <div class="stat-card">
+                <h3>✅ Commandes Acceptées</h3>
+                <div class="value" id="checkout-accepted" style="color: #27ae60;">-</div>
+                <p class="kpi-note" id="checkout-accepted-note">Acceptées / Tentatives</p>
+            </div>
+            <div class="stat-card">
+                <h3>🛑 Blocages Mineurs (Adult)</h3>
+                <div class="value" id="checkout-blocked" style="color: #e74c3c;">-</div>
+                <p class="kpi-note" id="checkout-blocked-note">Adult rejetées / Adult tentées</p>
+            </div>
+            <div class="stat-card">
+                <h3>📉 Taux Blocage Checkout</h3>
+                <div class="value" id="checkout-reject-rate" style="color: #8e44ad;">-%</div>
+                <p class="kpi-note" id="checkout-age-note">Age moyen tentatives: -</p>
             </div>
         </div>
 
@@ -388,6 +418,53 @@
                     `dont sévérité haute: ${highSeverity}`;
             } catch (error) {
                 console.error('Erreur chargement stats:', error);
+            }
+        }
+
+        async function loadCheckoutStats() {
+            try {
+                const response = await fetch(`${API_URL}/api/checkout/stats?window_hours=24`);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                const stats = await response.json();
+
+                document.getElementById('checkout-attempts').textContent = stats.total_attempts ?? 0;
+                document.getElementById('checkout-accepted').textContent = stats.accepted_orders ?? 0;
+                document.getElementById('checkout-blocked').textContent = stats.blocked_underage_orders ?? 0;
+                document.getElementById('checkout-reject-rate').textContent = `${(stats.rejection_rate ?? 0).toFixed(2)}%`;
+
+                const attempts = stats.total_attempts ?? 0;
+                const accepted = stats.accepted_orders ?? 0;
+                const blocked = stats.blocked_underage_orders ?? 0;
+                const adultAttempts = stats.adult_product_attempts ?? 0;
+                const adultRejected = stats.adult_product_rejected ?? 0;
+                const adultRejectRate = stats.adult_rejection_rate ?? 0;
+                const avgAge = stats.avg_customer_age ?? 0;
+
+                document.getElementById('checkout-accepted-note').textContent =
+                    `${accepted}/${attempts} acceptées`;
+                document.getElementById('checkout-blocked-note').textContent =
+                    `${adultRejected}/${adultAttempts} Adult rejetées (${adultRejectRate.toFixed(2)}%)`;
+                document.getElementById('checkout-age-note').textContent =
+                    `Age moyen tentatives: ${avgAge.toFixed(1)} ans`;
+
+                if (stats.last_attempt_at) {
+                    document.getElementById('checkout-last-attempt').textContent =
+                        `Dernière tentative: ${new Date(stats.last_attempt_at).toLocaleString('fr-FR')}`;
+                } else {
+                    document.getElementById('checkout-last-attempt').textContent = 'Dernière tentative: aucune';
+                }
+            } catch (error) {
+                console.error('Erreur chargement checkout stats:', error);
+                document.getElementById('checkout-attempts').textContent = '-';
+                document.getElementById('checkout-accepted').textContent = '-';
+                document.getElementById('checkout-blocked').textContent = '-';
+                document.getElementById('checkout-reject-rate').textContent = '-%';
+                document.getElementById('checkout-last-attempt').textContent = 'Dernière tentative: API indisponible';
+                document.getElementById('checkout-accepted-note').textContent = 'Acceptées / Tentatives';
+                document.getElementById('checkout-blocked-note').textContent = 'Adult rejetées / Adult tentées';
+                document.getElementById('checkout-age-note').textContent = 'Age moyen tentatives: -';
             }
         }
 
@@ -507,6 +584,7 @@
                     alert(`✅ Décision enregistrée: ${decision}`);
                     loadAlerts();
                     loadStats();
+                    loadCheckoutStats();
                 } else {
                     alert('❌ Erreur lors de l\'enregistrement');
                 }
@@ -567,6 +645,7 @@
                 alert(`✅ ${result.message}`);
                 loadAlerts();
                 loadStats();
+                loadCheckoutStats();
             } catch (error) {
                 console.error('Erreur sync:', error);
                 alert('❌ Erreur de synchronisation');
@@ -576,11 +655,13 @@
         // Initialisation
         window.addEventListener('DOMContentLoaded', () => {
             loadStats();
+            loadCheckoutStats();
             loadAlerts();
 
             // Rafraîchissement auto toutes les 30 secondes
             setInterval(() => {
                 loadStats();
+                loadCheckoutStats();
                 loadAlerts();
             }, 30000);
         });

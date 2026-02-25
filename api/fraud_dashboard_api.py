@@ -10,11 +10,12 @@ Permet de:
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import importlib.util
 import json
+import csv
 import psycopg2
 import site
 import sys
@@ -141,9 +142,61 @@ class IdentityStats(BaseModel):
     by_status: dict
     by_method: dict
 
+class ProductCatalogItem(BaseModel):
+    product_id: int
+    name: str
+    category: Optional[str] = None
+    price: float
+    stock_quantity: int
+    is_adult_restricted: bool
+
+class IdCardPreview(BaseModel):
+    file: str
+    birthdate: str
+    age: int
+    is_adult: bool
+
+class OrderItemRequest(BaseModel):
+    product_id: int
+    quantity: int = Field(default=1, ge=1)
+
+class CheckoutRequest(BaseModel):
+    customer_id: str
+    id_card_file: str
+    items: List[OrderItemRequest]
+    payment_method: str = "card"
+
+class CheckoutResponse(BaseModel):
+    accepted: bool
+    order_id: Optional[int] = None
+    customer_id: str
+    id_card_file: str
+    customer_age: int
+    total_amount: float
+    blocked_reason: Optional[str] = None
+    blocked_products: List[int] = []
+    created_at: str
+
+class CheckoutStats(BaseModel):
+    window_hours: int
+    total_attempts: int
+    accepted_orders: int
+    blocked_underage_orders: int
+    rejection_rate: float
+    adult_product_attempts: int
+    adult_product_rejected: int
+    adult_rejection_rate: float
+    avg_customer_age: float
+    last_attempt_at: Optional[str] = None
+
 # ============================================================================
 # DATABASE
 # ============================================================================
+
+DATASET_DIR = Path(__file__).resolve().parent.parent / "kivendtout_dataset"
+ID_CARDS_DIR = DATASET_DIR / "synthetic_id_cards"
+ID_LABELS_FILE = DATASET_DIR / "synthetic_id_labels.csv"
+ID_LABELS_CACHE = None
 
 def get_db_connection():
     """Connexion PostgreSQL"""
@@ -154,6 +207,89 @@ def get_db_connection():
         user='postgres',
         password='postgres'
     )
+
+def load_id_labels():
+    """
+    Charge le mapping fichier ID -> date de naissance.
+    Source: synthetic_id_labels.csv associé aux synthetic_id_cards/*.png.
+    """
+    global ID_LABELS_CACHE
+    if ID_LABELS_CACHE is not None:
+        return ID_LABELS_CACHE
+
+    if not ID_LABELS_FILE.exists():
+        raise RuntimeError(f"Fichier labels introuvable: {ID_LABELS_FILE}")
+
+    cache = {}
+    with ID_LABELS_FILE.open("r", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            file_name = (row.get("file") or "").strip()
+            birthdate = (row.get("birthdate") or "").strip()
+            if not file_name or not birthdate:
+                continue
+            cache[file_name] = birthdate
+
+    ID_LABELS_CACHE = cache
+    return ID_LABELS_CACHE
+
+def compute_age(birthdate_str: str) -> int:
+    birth = datetime.strptime(birthdate_str, "%Y-%m-%d").date()
+    today = date.today()
+    return today.year - birth.year - ((today.month, today.day) < (birth.month, birth.day))
+
+def extract_age_from_id_card(id_card_file: str):
+    """
+    Retourne (file_name, birthdate_str, age) pour une carte d'identité synthétique.
+    """
+    safe_name = Path(id_card_file).name
+    card_path = ID_CARDS_DIR / safe_name
+    if not card_path.exists():
+        raise HTTPException(status_code=404, detail=f"ID card not found: {safe_name}")
+
+    labels = load_id_labels()
+    if safe_name not in labels:
+        raise HTTPException(status_code=400, detail=f"No birthdate label found for card: {safe_name}")
+
+    birthdate_str = labels[safe_name]
+    age = compute_age(birthdate_str)
+    return safe_name, birthdate_str, age
+
+def is_adult_restricted(category: Optional[str]) -> bool:
+    return (category or "").strip().lower() == "adult"
+
+def get_or_create_customer_address(cursor, customer_id: str) -> int:
+    cursor.execute("""
+        SELECT address_id
+        FROM addresses
+        WHERE customer_id = %s
+        ORDER BY address_id
+        LIMIT 1
+    """, (customer_id,))
+    row = cursor.fetchone()
+    if row:
+        return row[0]
+
+    cursor.execute("SELECT country FROM customers WHERE customer_id = %s", (customer_id,))
+    customer = cursor.fetchone()
+    if not customer:
+        raise HTTPException(status_code=404, detail=f"Customer not found: {customer_id}")
+
+    country = customer[0] or "FR"
+    cursor.execute("""
+        INSERT INTO addresses (customer_id, street, city, postal_code, country, address_type, created_at)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        RETURNING address_id
+    """, (
+        customer_id,
+        "1 Rue du Commerce",
+        "Paris",
+        "75001",
+        country,
+        "both",
+        datetime.now()
+    ))
+    return cursor.fetchone()[0]
 
 def init_fraud_alerts_table():
     """
@@ -241,6 +377,81 @@ def init_identity_verifications_table():
     conn.close()
     print("✅ Table identity_verifications initialisée")
 
+def init_checkout_attempts_table():
+    """Crée la table d'audit des tentatives de checkout API."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS checkout_attempts (
+            attempt_id BIGSERIAL PRIMARY KEY,
+            attempted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            customer_id VARCHAR(50),
+            id_card_file VARCHAR(100),
+            customer_age INT,
+            contains_adult_product BOOLEAN DEFAULT FALSE,
+            blocked_underage BOOLEAN DEFAULT FALSE,
+            accepted BOOLEAN DEFAULT FALSE,
+            blocked_products TEXT,
+            total_amount NUMERIC(10, 2),
+            order_id INTEGER,
+            notes TEXT
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_checkout_attempts_ts ON checkout_attempts(attempted_at);
+        CREATE INDEX IF NOT EXISTS idx_checkout_attempts_blocked ON checkout_attempts(blocked_underage);
+        CREATE INDEX IF NOT EXISTS idx_checkout_attempts_accepted ON checkout_attempts(accepted);
+    """)
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+    print("✅ Table checkout_attempts initialisée")
+
+def log_checkout_attempt(
+    customer_id: str,
+    id_card_file: str,
+    customer_age: int,
+    contains_adult_product: bool,
+    blocked_underage: bool,
+    accepted: bool,
+    blocked_products: List[int],
+    total_amount: float,
+    order_id: Optional[int] = None,
+    notes: Optional[str] = None
+):
+    """
+    Audit technique/métier des tentatives de commande API.
+    Utilise une connexion dédiée pour conserver les logs même en cas de rollback checkout.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            INSERT INTO checkout_attempts (
+                attempted_at, customer_id, id_card_file, customer_age,
+                contains_adult_product, blocked_underage, accepted,
+                blocked_products, total_amount, order_id, notes
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (
+            datetime.now(),
+            customer_id,
+            id_card_file,
+            customer_age,
+            contains_adult_product,
+            blocked_underage,
+            accepted,
+            ",".join(str(p) for p in sorted(blocked_products)) if blocked_products else None,
+            round(total_amount, 2),
+            order_id,
+            notes
+        ))
+        conn.commit()
+    finally:
+        cursor.close()
+        conn.close()
+
 # ============================================================================
 # KAFKA CONSUMER (Background sync)
 # ============================================================================
@@ -327,6 +538,7 @@ async def startup_event():
     print("🚀 Démarrage API Fraud Detection...")
     init_fraud_alerts_table()
     init_identity_verifications_table()
+    init_checkout_attempts_table()
     print("✅ Initialisation API terminée")
 
 @app.get("/")
@@ -340,6 +552,10 @@ async def root():
             "alert_detail": "/api/alerts/{alert_id}",
             "identity_verify": "/api/verify-id",
             "identity_stats": "/api/identity/stats",
+            "products": "/api/products",
+            "id_cards": "/api/id-cards",
+            "checkout": "/api/orders/checkout",
+            "checkout_stats": "/api/checkout/stats",
             "stats": "/api/stats",
             "sync": "/api/sync"
         }
@@ -670,6 +886,282 @@ async def get_identity_stats():
         total_verifications=total_verifications,
         by_status=by_status,
         by_method=by_method
+    )
+
+@app.get("/api/products", response_model=List[ProductCatalogItem])
+async def get_products(
+    adult_only: bool = Query(False, description="Retourne uniquement les produits catégorie Adult"),
+    limit: int = Query(100, ge=1, le=1000),
+    offset: int = Query(0, ge=0)
+):
+    """Catalogue produits pour pilotage des commandes API."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    query = """
+        SELECT product_id, name, category, price, stock_quantity
+        FROM products
+        WHERE 1=1
+    """
+    params = []
+
+    if adult_only:
+        query += " AND LOWER(category) = 'adult'"
+
+    query += " ORDER BY product_id LIMIT %s OFFSET %s"
+    params.extend([limit, offset])
+    cursor.execute(query, params)
+
+    items = []
+    for row in cursor.fetchall():
+        category = row[2]
+        items.append(ProductCatalogItem(
+            product_id=row[0],
+            name=row[1],
+            category=category,
+            price=float(row[3]),
+            stock_quantity=int(row[4]),
+            is_adult_restricted=is_adult_restricted(category)
+        ))
+
+    cursor.close()
+    conn.close()
+    return items
+
+@app.get("/api/id-cards", response_model=List[IdCardPreview])
+async def get_id_cards(
+    adult: Optional[bool] = Query(None, description="true=18+, false=<18"),
+    limit: int = Query(60, ge=1, le=500)
+):
+    """
+    Retourne un aperçu des cartes d'identité synthétiques.
+    La date de naissance est extraite du dataset des cartes (labels associés aux PNG).
+    """
+    labels = load_id_labels()
+    rows = []
+    for file_name, birthdate in sorted(labels.items()):
+        age = compute_age(birthdate)
+        is_adult = age >= 18
+        if adult is not None and is_adult != adult:
+            continue
+        rows.append(IdCardPreview(
+            file=file_name,
+            birthdate=birthdate,
+            age=age,
+            is_adult=is_adult
+        ))
+        if len(rows) >= limit:
+            break
+    return rows
+
+@app.post("/api/orders/checkout", response_model=CheckoutResponse)
+async def create_checkout_order(payload: CheckoutRequest):
+    """
+    Création d'une commande client via API avec garde-fou majorité:
+    - Lit la date de naissance via la carte d'identité synthétique (id.png + labels)
+    - Refuse les produits catégorie Adult si âge < 18 ans
+    """
+    if not payload.items:
+        raise HTTPException(status_code=400, detail="At least one item is required")
+
+    safe_card_name, birthdate_str, age = extract_age_from_id_card(payload.id_card_file)
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute("SELECT 1 FROM customers WHERE customer_id = %s", (payload.customer_id,))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=404, detail=f"Customer not found: {payload.customer_id}")
+
+        quantities_by_product = defaultdict(int)
+        for item in payload.items:
+            quantities_by_product[item.product_id] += item.quantity
+
+        product_ids = list(quantities_by_product.keys())
+        placeholders = ",".join(["%s"] * len(product_ids))
+        cursor.execute(f"""
+            SELECT product_id, name, category, price, stock_quantity
+            FROM products
+            WHERE product_id IN ({placeholders})
+            FOR UPDATE
+        """, product_ids)
+        products = {row[0]: row for row in cursor.fetchall()}
+
+        missing = [pid for pid in product_ids if pid not in products]
+        if missing:
+            raise HTTPException(status_code=400, detail=f"Unknown product_id(s): {missing}")
+
+        blocked_adult_products = []
+        contains_adult_product = False
+        total_amount = 0.0
+        for product_id, qty in quantities_by_product.items():
+            _, _, category, unit_price, stock_qty = products[product_id]
+            product_is_adult = is_adult_restricted(category)
+            if product_is_adult:
+                contains_adult_product = True
+            if age < 18 and product_is_adult:
+                blocked_adult_products.append(product_id)
+            if qty > int(stock_qty):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Insufficient stock for product {product_id}: requested={qty}, stock={stock_qty}"
+                )
+            total_amount += float(unit_price) * qty
+
+        if blocked_adult_products:
+            # Matérialise le contrôle 18+ sur le dashboard via table d'audit dédiée.
+            try:
+                log_checkout_attempt(
+                    customer_id=payload.customer_id,
+                    id_card_file=safe_card_name,
+                    customer_age=age,
+                    contains_adult_product=contains_adult_product,
+                    blocked_underage=True,
+                    accepted=False,
+                    blocked_products=blocked_adult_products,
+                    total_amount=total_amount,
+                    notes="Blocked underage for adult products"
+                )
+            except Exception as log_error:
+                print(f"Erreur log checkout (blocked): {log_error}")
+
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "message": "Adult products are restricted to 18+ customers",
+                    "customer_age": age,
+                    "id_card_file": safe_card_name,
+                    "birthdate": birthdate_str,
+                    "blocked_products": sorted(blocked_adult_products)
+                }
+            )
+
+        address_id = get_or_create_customer_address(cursor, payload.customer_id)
+
+        # Génération robuste d'identifiant de commande sous concurrence
+        cursor.execute("LOCK TABLE orders IN EXCLUSIVE MODE")
+        cursor.execute("SELECT COALESCE(MAX(order_id), 0) + 1 FROM orders")
+        next_order_id = cursor.fetchone()[0]
+
+        now = datetime.now()
+        cursor.execute("""
+            INSERT INTO orders (
+                order_id, customer_id, order_date, total_amount, status,
+                shipping_address_id, billing_address_id, created_at
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        """, (
+            next_order_id,
+            payload.customer_id,
+            now,
+            round(total_amount, 2),
+            "pending",
+            address_id,
+            address_id,
+            now
+        ))
+
+        for product_id, qty in quantities_by_product.items():
+            unit_price = float(products[product_id][3])
+            cursor.execute("""
+                INSERT INTO order_items (order_id, product_id, quantity, unit_price, created_at)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (next_order_id, product_id, qty, unit_price, now))
+
+            cursor.execute("""
+                UPDATE products
+                SET stock_quantity = stock_quantity - %s
+                WHERE product_id = %s
+            """, (qty, product_id))
+
+        conn.commit()
+
+        try:
+            log_checkout_attempt(
+                customer_id=payload.customer_id,
+                id_card_file=safe_card_name,
+                customer_age=age,
+                contains_adult_product=contains_adult_product,
+                blocked_underage=False,
+                accepted=True,
+                blocked_products=[],
+                total_amount=total_amount,
+                order_id=next_order_id,
+                notes="Checkout accepted"
+            )
+        except Exception as log_error:
+            print(f"Erreur log checkout (accepted): {log_error}")
+
+        return CheckoutResponse(
+            accepted=True,
+            order_id=next_order_id,
+            customer_id=payload.customer_id,
+            id_card_file=safe_card_name,
+            customer_age=age,
+            total_amount=round(total_amount, 2),
+            created_at=now.isoformat()
+        )
+
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Checkout failed: {e}")
+    finally:
+        cursor.close()
+        conn.close()
+
+@app.get("/api/checkout/stats", response_model=CheckoutStats)
+async def get_checkout_stats(
+    window_hours: int = Query(24, ge=1, le=720, description="Fenêtre d'observation en heures")
+):
+    """
+    KPIs checkout API pour matérialiser le contrôle de majorité sur dashboard.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT
+            COUNT(*)::INT AS total_attempts,
+            COALESCE(SUM(CASE WHEN accepted THEN 1 ELSE 0 END), 0)::INT AS accepted_orders,
+            COALESCE(SUM(CASE WHEN blocked_underage THEN 1 ELSE 0 END), 0)::INT AS blocked_underage_orders,
+            COALESCE(SUM(CASE WHEN contains_adult_product THEN 1 ELSE 0 END), 0)::INT AS adult_product_attempts,
+            COALESCE(SUM(CASE WHEN contains_adult_product AND blocked_underage THEN 1 ELSE 0 END), 0)::INT AS adult_product_rejected,
+            COALESCE(AVG(customer_age), 0)::FLOAT AS avg_customer_age,
+            MAX(attempted_at) AS last_attempt_at
+        FROM checkout_attempts
+        WHERE attempted_at >= NOW() - (%s || ' hours')::INTERVAL
+    """, (window_hours,))
+
+    row = cursor.fetchone()
+    cursor.close()
+    conn.close()
+
+    total_attempts = int(row[0] or 0)
+    accepted_orders = int(row[1] or 0)
+    blocked_underage_orders = int(row[2] or 0)
+    adult_product_attempts = int(row[3] or 0)
+    adult_product_rejected = int(row[4] or 0)
+    avg_customer_age = float(row[5] or 0.0)
+    last_attempt_at = row[6]
+
+    rejection_rate = round((blocked_underage_orders / total_attempts) * 100, 2) if total_attempts > 0 else 0.0
+    adult_rejection_rate = round((adult_product_rejected / adult_product_attempts) * 100, 2) if adult_product_attempts > 0 else 0.0
+
+    return CheckoutStats(
+        window_hours=window_hours,
+        total_attempts=total_attempts,
+        accepted_orders=accepted_orders,
+        blocked_underage_orders=blocked_underage_orders,
+        rejection_rate=rejection_rate,
+        adult_product_attempts=adult_product_attempts,
+        adult_product_rejected=adult_product_rejected,
+        adult_rejection_rate=adult_rejection_rate,
+        avg_customer_age=round(avg_customer_age, 2),
+        last_attempt_at=last_attempt_at.isoformat() if last_attempt_at else None
     )
 
 @app.post("/api/sync")
