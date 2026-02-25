@@ -30,15 +30,17 @@ git --version
 ```bash
 git clone https://github.com/ChevalierPierree/ProjetDataM1JeanPierre.git
 cd ProjetDataM1JeanPierre
-git checkout PierreDump
 ```
 
 ### 2. Installer les Dépendances Python
 ```bash
-pip3 install -r requirements.txt
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.patator.txt
 
 # Ou manuellement :
-pip3 install kafka-python psycopg2-binary pymongo fastapi uvicorn pydantic apache-flink
+python -m pip install -r requirements.txt
 ```
 
 ### 3. Rendre le Script Exécutable
@@ -104,7 +106,7 @@ Une fois lancé, vous aurez accès à :
 |---------|-----|-------------|
 | Kafka UI | http://localhost:8082 | Interface pour Kafka (topics, messages) |
 | Flink Web UI | http://localhost:8083 | Monitoring Flink jobs |
-| Grafana | http://localhost:4000 | Dashboards de monitoring |
+| Grafana | http://localhost:3000 | Dashboards de monitoring |
 | Prometheus | http://localhost:9090 | Métriques système |
 
 ---
@@ -155,6 +157,12 @@ curl http://localhost:8000/health
 curl http://localhost:8000/api/stats | jq .
 ```
 
+Champs KPI attendus dans la réponse:
+- `fraud_rate`: taux fraude paiements (fraudulent_payments / total_payments)
+- `fraudulent_payments`: nombre de paiements frauduleux labelisés
+- `total_payments`: total paiements traités
+- `customer_alert_coverage`: % clients avec au moins une alerte
+
 ---
 
 ## 📊 Logs
@@ -203,13 +211,13 @@ python3 scripts/load_data_to_postgres.py
 ### MongoDB sans données
 ```bash
 # Recharger les événements
-python3 scripts/load_events_to_mongodb.py
+python scripts/load_events_to_mongodb.py
 ```
 
 ### Kafka sans messages
 ```bash
 # Re-streamer les événements
-python3 scripts/stream_events_to_kafka.py
+python scripts/stream_events_to_kafka.py
 ```
 
 ---
@@ -223,7 +231,7 @@ Pour repartir de zéro :
 docker compose down -v
 
 # 2. Supprimer les logs
-rm -rf logs/*
+rm -f logs/*.log
 
 # 3. Relancer
 ./patator
@@ -234,10 +242,10 @@ rm -rf logs/*
 ## 📖 Documentation
 
 - 📘 **README Principal** : `README.md`
-- 📗 **Architecture** : `ARCHITECTURE_PILIERS.md`
-- 📙 **Guide Dashboard** : `FRAUD_DASHBOARD_README.md`
+- 📗 **Guide PATATOR** : `PATATOR_GUIDE.md`
+- 📙 **Quickstart** : `QUICKSTART.md`
 - 📕 **Récapitulatif Complet** : `RECAP_COMPLET_PROJET.md`
-- 📓 **Explication Fraud Rate** : `EXPLICATION_FRAUD_RATE.md`
+- 📓 **Guide Simplifié** : `INSTALL_SIMPLE.md`
 
 ---
 
@@ -249,21 +257,21 @@ rm -rf logs/*
 docker compose up -d
 
 # 2. Charger données
-python3 scripts/load_data_to_postgres.py
-python3 scripts/load_events_to_mongodb.py
+python scripts/load_data_to_postgres.py
+python scripts/load_events_to_mongodb.py
 
 # 3. Kafka
-python3 scripts/create_kafka_topics.py
-python3 scripts/stream_events_to_kafka.py
+python scripts/create_kafka_topics.py
+python scripts/stream_events_to_kafka.py
 
 # 4. Détection fraude
-python3 scripts/fraud_detection_realtime.py
+python scripts/fraud_detection_realtime.py
 
 # 5. API
-python3 api/fraud_dashboard_api.py &
+python api/fraud_dashboard_api.py &
 
 # 6. Dashboard
-cd dashboard && python3 -m http.server 7600 &
+cd dashboard && python -m http.server 7600 &
 
 # 7. Ouvrir le navigateur
 open http://localhost:7600/fraud_dashboard.html
@@ -277,8 +285,8 @@ curl -s http://localhost:8000/api/stats | jq '.total_alerts'
 # Taux de fraude
 curl -s http://localhost:8000/api/stats | jq '.fraud_rate'
 
-# Alertes HIGH
-curl -s http://localhost:8000/api/stats | jq '.alerts_by_severity.HIGH'
+# Fraudes de paiement / volume
+curl -s http://localhost:8000/api/stats | jq '{fraudulent_payments,total_payments,customer_alert_coverage}'
 ```
 
 ---
@@ -290,7 +298,7 @@ curl -s http://localhost:8000/api/stats | jq '.alerts_by_severity.HIGH'
 ### Fonctionnalités
 - 🕵️ **11 règles de détection** (basiques + avancées)
 - 📊 **Dashboard analyst** pour gérer les alertes
-- 🚨 **10,857 alertes** détectées
+- 🚨 **Alertes temps réel** (volume variable selon run)
 - ⚡ **Streaming Kafka** (71,694 événements)
 - 🐘 **Flink** pour processing distribué
 - 📈 **Monitoring** Prometheus + Grafana
@@ -313,7 +321,6 @@ Si vous récupérez ce projet pour la première fois :
    ```bash
    git clone https://github.com/ChevalierPierree/ProjetDataM1JeanPierre.git
    cd ProjetDataM1JeanPierre
-   git checkout PierreDump
    ```
 
 2. **Installer les dépendances**

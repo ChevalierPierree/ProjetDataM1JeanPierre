@@ -26,10 +26,14 @@ Architecture de données complète pour plateforme e-commerce avec :
 # Cloner le projet
 git clone https://github.com/ChevalierPierree/ProjetDataM1JeanPierre.git
 cd ProjetDataM1JeanPierre
-git checkout PierreDump
 
-# Installer les dépendances (8 packages essentiels uniquement)
-pip3 install -r requirements.txt
+# Environnement Python local (recommandé)
+python3 -m venv .venv
+source .venv/bin/activate
+
+# Installer les dépendances nécessaires à PATATOR
+python -m pip install --upgrade pip
+python -m pip install -r requirements.patator.txt
 
 # Lancer TOUT en une commande
 chmod +x patator
@@ -39,12 +43,21 @@ chmod +x patator
 🎯 **PATATOR** lance automatiquement :
 - ✅ 13 services Docker (Kafka, Flink, PostgreSQL, MongoDB, etc.)
 - ✅ Chargement des données (71,694 événements)
-- ✅ Détection de fraude (10,857 alertes générées)
+- ✅ Détection de fraude temps réel et ingestion des alertes
 - ✅ API Backend (FastAPI sur port 8000)
 - ✅ Dashboard Web (sur port 7600)
 - ✅ Ouvre le dashboard dans le navigateur
 
 **Durée** : 3-5 minutes | **Documentation** : [PATATOR_GUIDE.md](./PATATOR_GUIDE.md)
+
+### 📐 KPI Fraude (définition)
+
+- `fraud_rate` = `paiements frauduleux labelisés / paiements totaux` (en %)
+- `total_alerts` = nombre d'alertes règles (peut être supérieur aux paiements frauduleux)
+- `fraudulent_payments` = volume de paiements labelisés fraude
+- `customer_alert_coverage` = `% de clients ayant au moins une alerte`
+
+Ces définitions évitent un taux > 100% et rendent les chiffres dashboard cohérents.
 
 ---
 
@@ -87,6 +100,7 @@ Toute la documentation se trouve dans le dossier [`markdowns/`](./markdowns/) :
 | [**⚡ PATATOR Guide**](./PATATOR_GUIDE.md) | Script de démarrage automatique (NOUVEAU !) |
 | [**🚀 Quick Start**](./QUICKSTART.md) | Démarrage en 3 commandes |
 | [**🛠️ Installation**](./INSTALLATION.md) | Guide d'installation détaillé |
+| [**🎤 Demo Soutenance**](./DEMO_SOUTENANCE.md) | Script de démo 5-7 minutes |
 | [**� Récap Complet**](./RECAP_COMPLET_PROJET.md) | Vue d'ensemble du projet |
 | [**�📖 README Complet**](./markdowns/README.md) | Documentation technique détaillée |
 | [**🛠️ Stack Technique**](./markdowns/STACK_TECHNIQUE.md) | Justification des choix technologiques |
@@ -133,7 +147,7 @@ MinIO (Data Lake)  ─┘                              │
 | Service | URL | Identifiants |
 |---------|-----|--------------|
 | MinIO Console | http://localhost:9001 | minio / minio123 |
-| Kafka UI | http://localhost:8080 | - |
+| Kafka UI | http://localhost:8082 | - |
 | Grafana | http://localhost:3000 | admin / admin |
 | Prometheus | http://localhost:9090 | - |
 | PostgreSQL | localhost:5432 | postgres / postgres |
@@ -158,4 +172,4 @@ Projet académique - EFREI M1 Data Engineering & IA - 2026
 
 Pour toute question, consultez la [documentation complète](./markdowns/README.md) ou créez une issue.
 
-**Dernière mise à jour** : 3 février 2026
+**Dernière mise à jour** : 25 février 2026
