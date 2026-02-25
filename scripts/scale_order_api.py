@@ -100,6 +100,117 @@ def percentile(sorted_values, p):
     return sorted_values[idx]
 
 
+def print_summary(results, total_requests, concurrency, duration):
+    counts = Counter(r["outcome"] for r in results)
+    latencies = sorted(r["latency_ms"] for r in results)
+
+    forbidden_not_blocked = sum(
+        1
+        for r in results
+        if r["minor"] and r["adult_item"] and r["outcome"] == "accepted"
+    )
+
+    throughput = (total_requests / duration) if duration > 0 else 0.0
+
+    print("\n=== Résultat scaling commandes API ===")
+    print(f"Requêtes totales          : {total_requests}")
+    print(f"Concurrence               : {concurrency}")
+    print(f"Durée totale              : {duration:.2f}s")
+    print(f"Débit moyen               : {throughput:.2f} req/s")
+    print(f"Acceptées                 : {counts['accepted']}")
+    print(f"Bloquées mineur/adult     : {counts['blocked_underage']}")
+    print(f"Erreurs HTTP              : {counts['error_http']}")
+    print(f"Erreurs réseau            : {counts['error_network']}")
+    print(f"P50 latency               : {percentile(latencies, 0.50):.1f} ms")
+    print(f"P95 latency               : {percentile(latencies, 0.95):.1f} ms")
+    print(f"P99 latency               : {percentile(latencies, 0.99):.1f} ms")
+    print(f"Mineur+Adult acceptés (KO): {forbidden_not_blocked}")
+
+    if forbidden_not_blocked > 0:
+        raise SystemExit("ECHEC: certains mineurs ont pu acheter des produits Adult")
+
+    print("OK: garde-fou 18+ appliqué correctement sous charge.")
+
+
+def run_burst_mode(args, adult_products, non_adult_products, adult_cards, minor_cards):
+    start = time.perf_counter()
+    results = []
+    with ThreadPoolExecutor(max_workers=args.concurrency) as executor:
+        futures = [
+            executor.submit(
+                run_request,
+                args.api_url,
+                adult_products,
+                non_adult_products,
+                adult_cards,
+                minor_cards,
+                args.adult_order_ratio,
+                args.minor_ratio
+            )
+            for _ in range(args.requests)
+        ]
+        for fut in as_completed(futures):
+            results.append(fut.result())
+
+    duration = time.perf_counter() - start
+    print_summary(results, args.requests, args.concurrency, duration)
+
+
+def run_realtime_mode(args, adult_products, non_adult_products, adult_cards, minor_cards):
+    duration_seconds = max(1, int(args.duration_seconds))
+    rps = max(1, int(args.rps))
+
+    print(
+        f"Mode temps réel: durée={duration_seconds}s, cible={rps} req/s, "
+        f"concurrence={args.concurrency}"
+    )
+
+    overall_start = time.perf_counter()
+    all_results = []
+    total_sent = 0
+
+    with ThreadPoolExecutor(max_workers=args.concurrency) as executor:
+        for second_idx in range(duration_seconds):
+            tick_start = time.perf_counter()
+            futures = [
+                executor.submit(
+                    run_request,
+                    args.api_url,
+                    adult_products,
+                    non_adult_products,
+                    adult_cards,
+                    minor_cards,
+                    args.adult_order_ratio,
+                    args.minor_ratio
+                )
+                for _ in range(rps)
+            ]
+
+            tick_results = []
+            for fut in as_completed(futures):
+                result = fut.result()
+                tick_results.append(result)
+                all_results.append(result)
+
+            total_sent += len(tick_results)
+            tick_counts = Counter(r["outcome"] for r in tick_results)
+            print(
+                f"[t+{second_idx + 1:03d}s] sent={len(tick_results)} "
+                f"accepted={tick_counts['accepted']} "
+                f"blocked={tick_counts['blocked_underage']} "
+                f"http_err={tick_counts['error_http']} "
+                f"net_err={tick_counts['error_network']}"
+            )
+
+            elapsed_tick = time.perf_counter() - tick_start
+            to_sleep = max(0.0, 1.0 - elapsed_tick)
+            if to_sleep > 0:
+                time.sleep(to_sleep)
+
+    total_duration = time.perf_counter() - overall_start
+    print_summary(all_results, total_sent, args.concurrency, total_duration)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Scaling de commandes client via API")
     parser.add_argument("--api-url", default="http://localhost:8000", help="URL API")
@@ -107,6 +218,14 @@ def main():
     parser.add_argument("--concurrency", type=int, default=20, help="Niveau de concurrence")
     parser.add_argument("--adult-order-ratio", type=float, default=0.5, help="Part de commandes ciblant un produit Adult")
     parser.add_argument("--minor-ratio", type=float, default=0.3, help="Part de cartes mineures utilisées")
+    parser.add_argument(
+        "--mode",
+        choices=["burst", "realtime"],
+        default="burst",
+        help="burst=rafale immédiate | realtime=flux continu par seconde"
+    )
+    parser.add_argument("--duration-seconds", type=int, default=30, help="Durée en secondes en mode realtime")
+    parser.add_argument("--rps", type=int, default=8, help="Requêtes par seconde en mode realtime")
     args = parser.parse_args()
 
     print("Chargement du catalogue et des cartes ID...")
@@ -128,54 +247,10 @@ def main():
         f"ID cards: adultes={len(adult_cards)} mineurs={len(minor_cards)}"
     )
 
-    start = time.perf_counter()
-    results = []
-    with ThreadPoolExecutor(max_workers=args.concurrency) as executor:
-        futures = [
-            executor.submit(
-                run_request,
-                args.api_url,
-                adult_products,
-                non_adult_products,
-                adult_cards,
-                minor_cards,
-                args.adult_order_ratio,
-                args.minor_ratio
-            )
-            for _ in range(args.requests)
-        ]
-        for fut in as_completed(futures):
-            results.append(fut.result())
-
-    duration = time.perf_counter() - start
-    counts = Counter(r["outcome"] for r in results)
-    latencies = sorted(r["latency_ms"] for r in results)
-
-    # Contrôle métier: mineur + produit adult doit être bloqué
-    forbidden_not_blocked = sum(
-        1
-        for r in results
-        if r["minor"] and r["adult_item"] and r["outcome"] == "accepted"
-    )
-
-    print("\n=== Résultat scaling commandes API ===")
-    print(f"Requêtes totales          : {args.requests}")
-    print(f"Concurrence               : {args.concurrency}")
-    print(f"Durée totale              : {duration:.2f}s")
-    print(f"Débit moyen               : {args.requests / duration:.2f} req/s")
-    print(f"Acceptées                 : {counts['accepted']}")
-    print(f"Bloquées mineur/adult     : {counts['blocked_underage']}")
-    print(f"Erreurs HTTP              : {counts['error_http']}")
-    print(f"Erreurs réseau            : {counts['error_network']}")
-    print(f"P50 latency               : {percentile(latencies, 0.50):.1f} ms")
-    print(f"P95 latency               : {percentile(latencies, 0.95):.1f} ms")
-    print(f"P99 latency               : {percentile(latencies, 0.99):.1f} ms")
-    print(f"Mineur+Adult acceptés (KO): {forbidden_not_blocked}")
-
-    if forbidden_not_blocked > 0:
-        raise SystemExit("ECHEC: certains mineurs ont pu acheter des produits Adult")
-
-    print("OK: garde-fou 18+ appliqué correctement sous charge.")
+    if args.mode == "realtime":
+        run_realtime_mode(args, adult_products, non_adult_products, adult_cards, minor_cards)
+    else:
+        run_burst_mode(args, adult_products, non_adult_products, adult_cards, minor_cards)
 
 
 if __name__ == "__main__":

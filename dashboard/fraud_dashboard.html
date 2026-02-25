@@ -698,9 +698,19 @@
                     body: JSON.stringify({
                         sync_kafka: true,
                         run_scaling: true,
+                        run_alert_scaling: true,
                         restart_api: true,
-                        requests: 80,
-                        concurrency: 16,
+                        scaling_mode: "realtime",
+                        requests: 120,
+                        concurrency: 12,
+                        duration_seconds: 30,
+                        rps: 8,
+                        alerts_mode: "realtime",
+                        alerts_requests: 180,
+                        alerts_concurrency: 10,
+                        alerts_duration_seconds: 30,
+                        alerts_rps: 6,
+                        high_severity_ratio: 0.35,
                         adult_order_ratio: 0.6,
                         minor_ratio: 0.4
                     })
@@ -734,6 +744,7 @@
                     body: JSON.stringify({
                         sync_kafka: true,
                         run_scaling: false,
+                        run_alert_scaling: false,
                         restart_api: false
                     })
                 });

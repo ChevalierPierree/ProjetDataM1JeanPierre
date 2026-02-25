@@ -471,6 +471,7 @@ main() {
     
     # Créer le dossier logs si nécessaire
     mkdir -p "$LOG_DIR"
+    touch "$LOG_DIR/runtime_refresh.log"
     
     # Exécution séquentielle
     check_prerequisites

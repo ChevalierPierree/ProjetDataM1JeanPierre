@@ -20,12 +20,14 @@ import subprocess
 import threading
 import time
 import os
+import random
 import psycopg2
 import site
 import sys
 from pathlib import Path
 from collections import defaultdict, Counter
 from fastapi.responses import FileResponse
+from uuid import uuid4
 
 
 def patch_kafka_vendor_six():
@@ -215,22 +217,56 @@ class FraudReasonStat(BaseModel):
     medium: int
     low: int
 
+class AlertSimulationRequest(BaseModel):
+    customer_id: Optional[str] = None
+    session_id: Optional[str] = None
+    event_type: Optional[str] = None
+    device: Optional[str] = None
+    utm_source: Optional[str] = None
+    customer_country: Optional[str] = None
+    previous_payments: Optional[int] = Field(default=None, ge=0, le=200)
+    is_new_customer: Optional[bool] = None
+    fraud_reasons: Optional[List[str]] = None
+    risk_score: Optional[int] = Field(default=None, ge=0, le=100)
+    severity: Optional[str] = Field(default=None, pattern="^(LOW|MEDIUM|HIGH)$")
+    status: str = Field(default="PENDING_REVIEW", pattern="^(PENDING_REVIEW|APPROVED|BLOCKED|INVESTIGATING)$")
+
 class RuntimeRefreshRequest(BaseModel):
     sync_kafka: bool = True
     run_scaling: bool = True
+    run_alert_scaling: bool = True
     restart_api: bool = True
     max_sync_messages: int = Field(default=2000, ge=0, le=50000)
     requests: int = Field(default=80, ge=1, le=5000)
     concurrency: int = Field(default=16, ge=1, le=200)
     adult_order_ratio: float = Field(default=0.6, ge=0.0, le=1.0)
     minor_ratio: float = Field(default=0.4, ge=0.0, le=1.0)
+    scaling_mode: str = Field(default="realtime", pattern="^(burst|realtime)$")
+    duration_seconds: int = Field(default=30, ge=1, le=3600)
+    rps: int = Field(default=8, ge=1, le=200)
+    alerts_mode: str = Field(default="realtime", pattern="^(burst|realtime)$")
+    alerts_requests: int = Field(default=120, ge=1, le=20000)
+    alerts_concurrency: int = Field(default=10, ge=1, le=200)
+    alerts_duration_seconds: int = Field(default=30, ge=1, le=3600)
+    alerts_rps: int = Field(default=6, ge=1, le=500)
+    high_severity_ratio: float = Field(default=0.35, ge=0.0, le=1.0)
 
 class RuntimeRefreshResponse(BaseModel):
-    started: bool
-    pid: Optional[int] = None
+    started_orders: bool
+    orders_pid: Optional[int] = None
+    started_alerts: bool
+    alerts_pid: Optional[int] = None
     synced_alerts: int
+    scaling_mode: str
     requests: int
     concurrency: int
+    duration_seconds: int
+    rps: int
+    alerts_mode: str
+    alerts_requests: int
+    alerts_concurrency: int
+    alerts_duration_seconds: int
+    alerts_rps: int
     log_file: str
     message: str
 
@@ -246,6 +282,21 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 RUNTIME_LOG_FILE = BASE_DIR / "logs" / "runtime_refresh.log"
 RUNTIME_REFRESH_LOCK = threading.Lock()
 RUNTIME_SCALING_PROCESS = None
+RUNTIME_ALERTS_PROCESS = None
+
+FRAUD_REASON_POOL = [
+    "FIRST_PAYMENT",
+    "NEW_CUSTOMER",
+    "UNUSUAL_HOUR",
+    "MOBILE_DEVICE",
+    "DIRECT_TRAFFIC",
+    "PAYMENT_FAILED",
+    "VELOCITY_HIGH",
+    "NEW_DEVICE",
+    "UNUSUAL_AMOUNT",
+    "FAST_CHECKOUT",
+    "GEO_MISMATCH"
+]
 
 def get_db_connection():
     """Connexion PostgreSQL"""
@@ -501,6 +552,93 @@ def log_checkout_attempt(
         cursor.close()
         conn.close()
 
+def infer_severity_from_score(risk_score: int) -> str:
+    if risk_score >= 80:
+        return "HIGH"
+    if risk_score >= 60:
+        return "MEDIUM"
+    return "LOW"
+
+def build_simulated_alert(payload: AlertSimulationRequest) -> dict:
+    """
+    Construit une alerte synthétique (fraude) pour alimenter le dashboard en temps réel.
+    """
+    now = datetime.now()
+    customer_id = payload.customer_id or f"C{random.randint(1, 2500):05d}"
+    session_id = payload.session_id or f"SIM_{uuid4().hex[:12]}"
+    event_type = payload.event_type or random.choice(["payment_attempt", "checkout", "order_completed"])
+    device = payload.device or random.choice(["ios", "android", "desktop"])
+    utm_source = payload.utm_source or random.choice(["direct", "google", "instagram", "facebook", "email"])
+    customer_country = payload.customer_country or random.choice(["FR", "ES", "PT", "DE", "IT", "GB"])
+    previous_payments = payload.previous_payments if payload.previous_payments is not None else random.randint(0, 12)
+    is_new_customer = payload.is_new_customer if payload.is_new_customer is not None else (previous_payments == 0)
+
+    reasons = payload.fraud_reasons
+    if not reasons:
+        count = random.randint(1, 3)
+        reasons = random.sample(FRAUD_REASON_POOL, k=count)
+
+    risk_score = payload.risk_score
+    if risk_score is None:
+        risk_score = random.randint(60, 96) if random.random() < 0.35 else random.randint(45, 79)
+
+    severity = payload.severity or infer_severity_from_score(risk_score)
+    status = payload.status
+    alert_id = f"FRD_SIM_{int(time.time() * 1000)}_{uuid4().hex[:6].upper()}"
+
+    return {
+        "alert_id": alert_id,
+        "alert_timestamp": now,
+        "event_timestamp": now - timedelta(seconds=random.randint(0, 8)),
+        "customer_id": customer_id,
+        "session_id": session_id,
+        "event_type": event_type,
+        "device": device,
+        "utm_source": utm_source,
+        "customer_country": customer_country,
+        "previous_payments": previous_payments,
+        "is_new_customer": bool(is_new_customer),
+        "fraud_reasons": reasons,
+        "risk_score": int(risk_score),
+        "status": status,
+        "severity": severity
+    }
+
+def insert_fraud_alert(alert: dict):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            INSERT INTO fraud_alerts (
+                alert_id, alert_timestamp, event_timestamp, customer_id,
+                session_id, event_type, device, utm_source, customer_country,
+                previous_payments, is_new_customer, fraud_reasons,
+                risk_score, status, severity
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (alert_id) DO NOTHING
+        """, (
+            alert["alert_id"],
+            alert["alert_timestamp"],
+            alert["event_timestamp"],
+            alert["customer_id"],
+            alert["session_id"],
+            alert["event_type"],
+            alert["device"],
+            alert["utm_source"],
+            alert["customer_country"],
+            alert["previous_payments"],
+            alert["is_new_customer"],
+            ",".join(alert["fraud_reasons"]),
+            alert["risk_score"],
+            alert["status"],
+            alert["severity"]
+        ))
+        conn.commit()
+    finally:
+        cursor.close()
+        conn.close()
+
 def append_runtime_log(message: str):
     """Écrit une ligne horodatée dans le log runtime refresh."""
     try:
@@ -512,10 +650,13 @@ def append_runtime_log(message: str):
         print(f"Erreur écriture runtime log: {e}")
 
 def start_scaling_process(
+    scaling_mode: str,
     requests: int,
     concurrency: int,
     adult_order_ratio: float,
-    minor_ratio: float
+    minor_ratio: float,
+    duration_seconds: int,
+    rps: int
 ) -> Tuple[bool, Optional[int], str]:
     """Lance scripts/scale_order_api.py en arrière-plan si aucun run n'est actif."""
     global RUNTIME_SCALING_PROCESS
@@ -537,10 +678,13 @@ def start_scaling_process(
             sys.executable,
             str(script_path),
             "--api-url", "http://localhost:8000",
+            "--mode", str(scaling_mode),
             "--requests", str(requests),
             "--concurrency", str(concurrency),
             "--adult-order-ratio", str(adult_order_ratio),
             "--minor-ratio", str(minor_ratio),
+            "--duration-seconds", str(duration_seconds),
+            "--rps", str(rps),
         ]
 
         # Le log runtime consolide les déclenchements et sorties du scaling.
@@ -557,6 +701,58 @@ def start_scaling_process(
 
         RUNTIME_SCALING_PROCESS = process
         message = f"Scaling lancé (pid={process.pid})"
+        append_runtime_log(message)
+        return True, process.pid, message
+
+def start_alert_scaling_process(
+    alerts_mode: str,
+    alerts_requests: int,
+    alerts_concurrency: int,
+    alerts_duration_seconds: int,
+    alerts_rps: int,
+    high_severity_ratio: float
+) -> Tuple[bool, Optional[int], str]:
+    """Lance scripts/scale_alerts_api.py en arrière-plan si aucun run n'est actif."""
+    global RUNTIME_ALERTS_PROCESS
+
+    script_path = BASE_DIR / "scripts" / "scale_alerts_api.py"
+    if not script_path.exists():
+        message = f"Script alert scaling introuvable: {script_path}"
+        append_runtime_log(message)
+        return False, None, message
+
+    with RUNTIME_REFRESH_LOCK:
+        if RUNTIME_ALERTS_PROCESS is not None and RUNTIME_ALERTS_PROCESS.poll() is None:
+            pid = RUNTIME_ALERTS_PROCESS.pid
+            message = f"Alert scaling déjà en cours (pid={pid})"
+            append_runtime_log(message)
+            return False, pid, message
+
+        cmd = [
+            sys.executable,
+            str(script_path),
+            "--api-url", "http://localhost:8000",
+            "--mode", str(alerts_mode),
+            "--requests", str(alerts_requests),
+            "--concurrency", str(alerts_concurrency),
+            "--duration-seconds", str(alerts_duration_seconds),
+            "--rps", str(alerts_rps),
+            "--high-severity-ratio", str(high_severity_ratio),
+        ]
+
+        log_handle = RUNTIME_LOG_FILE.open("a", encoding="utf-8")
+        append_runtime_log(f"Lancement alert scaling: {' '.join(cmd)}")
+        process = subprocess.Popen(
+            cmd,
+            cwd=str(BASE_DIR),
+            stdout=log_handle,
+            stderr=subprocess.STDOUT,
+            start_new_session=True
+        )
+        log_handle.close()
+
+        RUNTIME_ALERTS_PROCESS = process
+        message = f"Alert scaling lancé (pid={process.pid})"
         append_runtime_log(message)
         return True, process.pid, message
 
@@ -660,6 +856,8 @@ def sync_alerts_from_kafka(max_messages=1000):
 async def startup_event():
     """Initialisation au démarrage"""
     print("🚀 Démarrage API Fraud Detection...")
+    # Garantit la présence du fichier pour `tail -f logs/runtime_refresh.log`
+    append_runtime_log("API startup")
     init_fraud_alerts_table()
     init_identity_verifications_table()
     init_checkout_attempts_table()
@@ -674,6 +872,7 @@ async def root():
         "endpoints": {
             "alerts": "/api/alerts",
             "alert_detail": "/api/alerts/{alert_id}",
+            "simulate_alert": "/api/alerts/simulate",
             "identity_verify": "/api/verify-id",
             "identity_stats": "/api/identity/stats",
             "products": "/api/products",
@@ -764,6 +963,36 @@ async def get_alert(alert_id: str):
     conn.close()
     
     return alert_dict
+
+@app.post("/api/alerts/simulate", response_model=FraudAlert)
+async def simulate_alert(payload: AlertSimulationRequest):
+    """
+    Génère une alerte synthétique et l'insère dans fraud_alerts.
+    Utilisé par le simulateur temps réel pour rendre le dashboard dynamique.
+    """
+    alert = build_simulated_alert(payload)
+    insert_fraud_alert(alert)
+
+    return FraudAlert(
+        alert_id=alert["alert_id"],
+        alert_timestamp=str(alert["alert_timestamp"]),
+        event_timestamp=str(alert["event_timestamp"]) if alert["event_timestamp"] else None,
+        customer_id=alert["customer_id"],
+        session_id=alert["session_id"],
+        event_type=alert["event_type"],
+        device=alert["device"],
+        utm_source=alert["utm_source"],
+        customer_country=alert["customer_country"],
+        previous_payments=int(alert["previous_payments"]),
+        is_new_customer=bool(alert["is_new_customer"]),
+        fraud_reasons=list(alert["fraud_reasons"]),
+        risk_score=int(alert["risk_score"]),
+        status=alert["status"],
+        severity=alert["severity"],
+        decision=None,
+        decided_at=None,
+        decided_by=None
+    )
 
 @app.post("/api/alerts/{alert_id}/decide")
 async def decide_alert(alert_id: str, decision: AlertDecision):
@@ -1448,14 +1677,20 @@ async def runtime_refresh(payload: RuntimeRefreshRequest):
     - redémarrage API (optionnel)
     """
     synced_alerts = 0
-    started = False
-    pid = None
+    started_orders = False
+    orders_pid = None
+    started_alerts = False
+    alerts_pid = None
     messages = []
 
     append_runtime_log(
         "Runtime refresh demandé "
-        f"(sync={payload.sync_kafka}, scaling={payload.run_scaling}, restart_api={payload.restart_api}, "
-        f"requests={payload.requests}, concurrency={payload.concurrency})"
+        f"(sync={payload.sync_kafka}, scaling_orders={payload.run_scaling}, scaling_alerts={payload.run_alert_scaling}, "
+        f"restart_api={payload.restart_api}, order_mode={payload.scaling_mode}, order_requests={payload.requests}, "
+        f"order_concurrency={payload.concurrency}, order_duration={payload.duration_seconds}, order_rps={payload.rps}, "
+        f"alerts_mode={payload.alerts_mode}, alerts_requests={payload.alerts_requests}, "
+        f"alerts_concurrency={payload.alerts_concurrency}, alerts_duration={payload.alerts_duration_seconds}, "
+        f"alerts_rps={payload.alerts_rps})"
     )
 
     if payload.sync_kafka:
@@ -1465,28 +1700,65 @@ async def runtime_refresh(payload: RuntimeRefreshRequest):
         messages.append("sync=skipped")
 
     if payload.run_scaling:
-        started, pid, scaling_message = start_scaling_process(
+        started_orders, orders_pid, scaling_message = start_scaling_process(
+            scaling_mode=payload.scaling_mode,
             requests=payload.requests,
             concurrency=payload.concurrency,
             adult_order_ratio=payload.adult_order_ratio,
-            minor_ratio=payload.minor_ratio
+            minor_ratio=payload.minor_ratio,
+            duration_seconds=payload.duration_seconds,
+            rps=payload.rps
         )
         messages.append(scaling_message)
     else:
-        messages.append("scaling skipped")
+        messages.append("order scaling skipped")
+
+    if payload.run_alert_scaling:
+        started_alerts, alerts_pid, alert_scaling_message = start_alert_scaling_process(
+            alerts_mode=payload.alerts_mode,
+            alerts_requests=payload.alerts_requests,
+            alerts_concurrency=payload.alerts_concurrency,
+            alerts_duration_seconds=payload.alerts_duration_seconds,
+            alerts_rps=payload.alerts_rps,
+            high_severity_ratio=payload.high_severity_ratio
+        )
+        messages.append(alert_scaling_message)
+    else:
+        messages.append("alert scaling skipped")
 
     if payload.restart_api:
-        schedule_api_restart()
-        messages.append("API restart planifié")
+        restart_delay = 1.2
+        if payload.run_scaling and payload.scaling_mode == "realtime":
+            restart_delay = max(restart_delay, min(float(payload.duration_seconds) + 2.0, 120.0))
+        elif payload.run_scaling:
+            restart_delay = max(restart_delay, 3.0)
+
+        if payload.run_alert_scaling and payload.alerts_mode == "realtime":
+            restart_delay = max(restart_delay, min(float(payload.alerts_duration_seconds) + 2.0, 120.0))
+        elif payload.run_alert_scaling:
+            restart_delay = max(restart_delay, 3.0)
+
+        schedule_api_restart(delay_seconds=restart_delay)
+        messages.append(f"API restart planifié (+{restart_delay:.1f}s)")
     else:
         messages.append("API restart désactivé")
 
     return RuntimeRefreshResponse(
-        started=started,
-        pid=pid,
+        started_orders=started_orders,
+        orders_pid=orders_pid,
+        started_alerts=started_alerts,
+        alerts_pid=alerts_pid,
         synced_alerts=synced_alerts,
+        scaling_mode=payload.scaling_mode,
         requests=payload.requests,
         concurrency=payload.concurrency,
+        duration_seconds=payload.duration_seconds,
+        rps=payload.rps,
+        alerts_mode=payload.alerts_mode,
+        alerts_requests=payload.alerts_requests,
+        alerts_concurrency=payload.alerts_concurrency,
+        alerts_duration_seconds=payload.alerts_duration_seconds,
+        alerts_rps=payload.alerts_rps,
         log_file=str(RUNTIME_LOG_FILE),
         message=" | ".join(messages)
     )
