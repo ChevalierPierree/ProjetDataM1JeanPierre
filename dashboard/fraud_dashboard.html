@@ -33,6 +33,31 @@
             text-align: center;
         }
 
+        .top-nav {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 12px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.08);
+            padding: 12px 16px;
+            margin-bottom: 18px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .top-nav a {
+            text-decoration: none;
+            color: white;
+            background: #4f68d8;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.95em;
+        }
+
+        .top-nav a.active {
+            background: #2f3a7a;
+        }
+
         h1 {
             color: #333;
             font-size: 2.5em;
@@ -303,6 +328,13 @@
 
 <body>
     <div class="container">
+        <div class="top-nav">
+            <a href="index.html">Hub Dashboards</a>
+            <a class="active" href="fraud_dashboard.html">Fraude Globale</a>
+            <a href="fraud_types_dashboard.html">Types de Fraude</a>
+            <a href="id_cards_dashboard.html">Mineurs & ID Cards</a>
+        </div>
+
         <header>
             <h1>🕵️ Tableau de Bord Détection de Fraude</h1>
             <p style="color: #666; margin-top: 10px;">KiVendTout - Surveillance Fraude en Temps Réel</p>
@@ -372,8 +404,9 @@
                 <option value="MEDIUM">🟠 MOYENNE</option>
                 <option value="LOW">🔵 BASSE</option>
             </select>
-            <button onclick="loadAlerts()">🔄 Rafraîchir</button>
+            <button onclick="refreshRuntime()">🔄 Refresh Runtime</button>
             <button onclick="syncFromKafka()">📥 Sync Kafka</button>
+            <span id="runtime-status" style="color:#334; font-weight:600;">Runtime: idle</span>
         </div>
 
         <!-- Alerts -->
@@ -390,6 +423,30 @@
 
     <script>
         const API_URL = `${window.location.protocol}//${window.location.hostname}:8000`;
+
+        function setRuntimeStatus(message, isError = false) {
+            const el = document.getElementById('runtime-status');
+            if (!el) return;
+            el.textContent = `Runtime: ${message}`;
+            el.style.color = isError ? '#c0392b' : '#334';
+        }
+
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        async function waitForApiReady(maxSeconds = 30) {
+            for (let i = 0; i < maxSeconds; i++) {
+                try {
+                    const resp = await fetch(`${API_URL}/health`, { cache: 'no-store' });
+                    if (resp.ok) return true;
+                } catch (e) {
+                    // API potentiellement en redémarrage
+                }
+                await sleep(1000);
+            }
+            return false;
+        }
 
         // Charger les stats
         async function loadStats() {
@@ -631,29 +688,74 @@
             return translations[reason] || reason;
         }
 
-        // Sync depuis Kafka
+        // Runtime refresh: relance API + scaling + sync
+        async function refreshRuntime() {
+            try {
+                setRuntimeStatus('refresh runtime en cours...');
+                const response = await fetch(`${API_URL}/api/runtime/refresh`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        sync_kafka: true,
+                        run_scaling: true,
+                        restart_api: true,
+                        requests: 80,
+                        concurrency: 16,
+                        adult_order_ratio: 0.6,
+                        minor_ratio: 0.4
+                    })
+                });
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+            } catch (error) {
+                console.warn('Refresh runtime: interruption attendue si API restart', error);
+            }
+
+            const apiReady = await waitForApiReady(35);
+            if (!apiReady) {
+                setRuntimeStatus('API non joignable après refresh', true);
+                return;
+            }
+
+            setRuntimeStatus('API relancée, scaling lancé');
+            await loadStats();
+            await loadCheckoutStats();
+            await loadAlerts();
+        }
+
+        // Sync depuis Kafka uniquement
         async function syncFromKafka() {
             try {
-                document.getElementById('alerts-list').innerHTML =
-                    '<div class="loading"><div class="spinner"></div>Synchronisation depuis Kafka...</div>';
-
-                const response = await fetch(`${API_URL}/api/sync`, {
-                    method: 'POST'
+                setRuntimeStatus('sync Kafka en cours...');
+                const response = await fetch(`${API_URL}/api/runtime/refresh`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        sync_kafka: true,
+                        run_scaling: false,
+                        restart_api: false
+                    })
                 });
-                const result = await response.json();
 
-                alert(`✅ ${result.message}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                const result = await response.json();
+                setRuntimeStatus(result.message);
                 loadAlerts();
                 loadStats();
                 loadCheckoutStats();
             } catch (error) {
                 console.error('Erreur sync:', error);
-                alert('❌ Erreur de synchronisation');
+                setRuntimeStatus('Erreur de synchronisation', true);
             }
         }
 
         // Initialisation
         window.addEventListener('DOMContentLoaded', () => {
+            setRuntimeStatus('idle');
             loadStats();
             loadCheckoutStats();
             loadAlerts();

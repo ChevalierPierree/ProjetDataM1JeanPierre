@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mineurs & ID Cards - KiVendTout</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #4d88d6 0%, #2d4f94 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container { max-width: 1450px; margin: 0 auto; }
+        .top-nav {
+            background: rgba(255, 255, 255, 0.96);
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            padding: 12px 16px;
+            margin-bottom: 18px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .top-nav a {
+            text-decoration: none;
+            color: white;
+            background: #4f68d8;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.95em;
+        }
+        .top-nav a.active { background: #2f3a7a; }
+        header {
+            background: white;
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+            margin-bottom: 18px;
+        }
+        header h1 { color: #153160; margin-bottom: 8px; }
+        header p { color: #516085; }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        .stat {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 5px 18px rgba(0,0,0,0.1);
+            padding: 16px;
+        }
+        .stat .label { color: #4f5f86; font-size: 13px; margin-bottom: 6px; }
+        .stat .value { font-size: 30px; font-weight: 800; color: #1d3e88; }
+        .panel {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 5px 18px rgba(0,0,0,0.1);
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+        .panel h2 { color: #1a2b5c; margin-bottom: 12px; }
+        table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        th, td { text-align: left; padding: 10px; border-bottom: 1px solid #ebeffa; }
+        th { background: #f6f8ff; color: #20315f; }
+        .thumb {
+            width: 72px;
+            height: 50px;
+            object-fit: cover;
+            border-radius: 6px;
+            border: 1px solid #d9e1f8;
+            background: #f4f6ff;
+        }
+        .badge {
+            display: inline-block;
+            border-radius: 999px;
+            padding: 4px 10px;
+            font-size: 12px;
+            font-weight: 700;
+            color: white;
+        }
+        .minor { background: #d64848; }
+        .adult { background: #2f8f48; }
+        .blocked { background: #cf3f3f; }
+        .ok { background: #2f8f48; }
+        .controls {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+        }
+        select, button {
+            border-radius: 8px;
+            border: 1px solid #b8c3e5;
+            padding: 8px 12px;
+            font-size: 14px;
+        }
+        button {
+            background: #4f68d8;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="top-nav">
+        <a href="index.html">Hub Dashboards</a>
+        <a href="fraud_dashboard.html">Fraude Globale</a>
+        <a href="fraud_types_dashboard.html">Types de Fraude</a>
+        <a class="active" href="id_cards_dashboard.html">Mineurs & ID Cards</a>
+    </div>
+
+    <header>
+        <h1>🧾 Dashboard Mineurs & Cartes d'Identité</h1>
+        <p>Identification des mineurs via `synthetic_id_cards` + suivi en temps réel des blocages Adult (refresh auto 10s)</p>
+    </header>
+
+    <div class="stats-grid">
+        <div class="stat">
+            <div class="label">Total cartes ID</div>
+            <div class="value" id="cards-total">-</div>
+        </div>
+        <div class="stat">
+            <div class="label">Mineurs identifiés</div>
+            <div class="value" id="cards-minors" style="color:#d64848;">-</div>
+        </div>
+        <div class="stat">
+            <div class="label">Tentatives checkout (24h)</div>
+            <div class="value" id="attempts-total">-</div>
+        </div>
+        <div class="stat">
+            <div class="label">Blocages mineurs (24h)</div>
+            <div class="value" id="attempts-blocked" style="color:#d64848;">-</div>
+        </div>
+    </div>
+
+    <div class="panel">
+        <div class="controls">
+            <label for="attempt-limit"><strong>Historique tentatives:</strong></label>
+            <select id="attempt-limit">
+                <option value="20">20 lignes</option>
+                <option value="50" selected>50 lignes</option>
+                <option value="100">100 lignes</option>
+            </select>
+            <button onclick="refreshRuntime()">Refresh Runtime</button>
+            <span id="runtime-status" style="color:#1a2b5c;font-weight:600;">Runtime: idle</span>
+        </div>
+        <h2>Cartes ID Mineurs (< 18 ans)</h2>
+        <table>
+            <thead>
+            <tr>
+                <th>Image</th>
+                <th>Fichier</th>
+                <th>Date de naissance</th>
+                <th>Age</th>
+                <th>Statut</th>
+            </tr>
+            </thead>
+            <tbody id="minor-cards-body"></tbody>
+        </table>
+    </div>
+
+    <div class="panel">
+        <h2>Dernières Tentatives Bloquées (Adult / mineur)</h2>
+        <table>
+            <thead>
+            <tr>
+                <th>Date</th>
+                <th>Client</th>
+                <th>ID Card</th>
+                <th>Age</th>
+                <th>Produits bloqués</th>
+                <th>Résultat</th>
+            </tr>
+            </thead>
+            <tbody id="blocked-attempts-body"></tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    const API_URL = `${window.location.protocol}//${window.location.hostname}:8000`;
+
+    function setRuntimeStatus(message, isError = false) {
+        const el = document.getElementById('runtime-status');
+        if (!el) return;
+        el.textContent = `Runtime: ${message}`;
+        el.style.color = isError ? '#cf3f3f' : '#1a2b5c';
+    }
+
+    function sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    async function waitForApiReady(maxSeconds = 30) {
+        for (let i = 0; i < maxSeconds; i++) {
+            try {
+                const resp = await fetch(`${API_URL}/health`, { cache: 'no-store' });
+                if (resp.ok) return true;
+            } catch (e) {
+                // API potentiellement en redémarrage
+            }
+            await sleep(1000);
+        }
+        return false;
+    }
+
+    async function loadCards() {
+        const [allResp, minorResp] = await Promise.all([
+            fetch(`${API_URL}/api/id-cards?limit=500`),
+            fetch(`${API_URL}/api/id-cards?adult=false&limit=500`)
+        ]);
+        if (!allResp.ok || !minorResp.ok) {
+            throw new Error('API ID cards indisponible');
+        }
+        const allCards = await allResp.json();
+        const minors = await minorResp.json();
+
+        document.getElementById('cards-total').textContent = allCards.length;
+        document.getElementById('cards-minors').textContent = minors.length;
+
+        const body = document.getElementById('minor-cards-body');
+        if (!minors.length) {
+            body.innerHTML = '<tr><td colspan="5">Aucun mineur détecté.</td></tr>';
+            return;
+        }
+        body.innerHTML = minors.map(c => `
+            <tr>
+                <td><img class="thumb" src="${API_URL}/api/id-cards/image/${encodeURIComponent(c.file)}" alt="${c.file}"></td>
+                <td>${c.file}</td>
+                <td>${c.birthdate}</td>
+                <td>${c.age}</td>
+                <td><span class="badge minor">Mineur</span></td>
+            </tr>
+        `).join('');
+    }
+
+    async function loadAttemptStats() {
+        const resp = await fetch(`${API_URL}/api/checkout/stats?window_hours=24`);
+        if (!resp.ok) throw new Error('API checkout stats indisponible');
+        const stats = await resp.json();
+        document.getElementById('attempts-total').textContent = stats.total_attempts;
+        document.getElementById('attempts-blocked').textContent = stats.blocked_underage_orders;
+    }
+
+    async function loadBlockedAttempts() {
+        const limit = document.getElementById('attempt-limit').value;
+        const resp = await fetch(`${API_URL}/api/checkout/attempts?blocked_underage=true&limit=${limit}`);
+        if (!resp.ok) throw new Error('API checkout attempts indisponible');
+        const rows = await resp.json();
+        const body = document.getElementById('blocked-attempts-body');
+        if (!rows.length) {
+            body.innerHTML = '<tr><td colspan="6">Aucune tentative bloquée sur la période.</td></tr>';
+            return;
+        }
+        body.innerHTML = rows.map(r => `
+            <tr>
+                <td>${new Date(r.attempted_at).toLocaleString('fr-FR')}</td>
+                <td>${r.customer_id || '-'}</td>
+                <td>${r.id_card_file || '-'}</td>
+                <td>${r.customer_age ?? '-'}</td>
+                <td>${r.blocked_products || '-'}</td>
+                <td><span class="badge blocked">${r.blocked_underage ? 'Bloqué' : 'Accepté'}</span></td>
+            </tr>
+        `).join('');
+    }
+
+    async function refreshAll() {
+        try {
+            await Promise.all([loadCards(), loadAttemptStats(), loadBlockedAttempts()]);
+        } catch (e) {
+            console.error(e);
+            document.getElementById('minor-cards-body').innerHTML = '<tr><td colspan="5">Erreur chargement cartes.</td></tr>';
+            document.getElementById('blocked-attempts-body').innerHTML = '<tr><td colspan="6">Erreur chargement tentatives.</td></tr>';
+        }
+    }
+
+    async function refreshRuntime() {
+        try {
+            setRuntimeStatus('refresh runtime en cours...');
+            const response = await fetch(`${API_URL}/api/runtime/refresh`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    sync_kafka: true,
+                    run_scaling: true,
+                    restart_api: true,
+                    requests: 80,
+                    concurrency: 16,
+                    adult_order_ratio: 0.6,
+                    minor_ratio: 0.4
+                })
+            });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        } catch (e) {
+            console.warn('Refresh runtime: interruption attendue si API restart', e);
+        }
+
+        const ready = await waitForApiReady(35);
+        if (!ready) {
+            setRuntimeStatus('API non joignable après refresh', true);
+            return;
+        }
+
+        setRuntimeStatus('API relancée, scaling lancé');
+        await refreshAll();
+    }
+
+    document.getElementById('attempt-limit').addEventListener('change', loadBlockedAttempts);
+
+    window.addEventListener('DOMContentLoaded', () => {
+        setRuntimeStatus('idle');
+        refreshAll();
+        setInterval(refreshAll, 10000);
+    });
+</script>
+</body>
+</html>

@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hub Dashboards - KiVendTout</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(140deg, #4f68d8 0%, #2f3a7a 100%);
+            min-height: 100vh;
+            padding: 24px;
+        }
+        .container { max-width: 1100px; margin: 0 auto; }
+        header {
+            background: white;
+            border-radius: 14px;
+            padding: 24px;
+            margin-bottom: 16px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+        }
+        header h1 { color: #1c2e70; margin-bottom: 8px; }
+        header p { color: #4f5f86; }
+        .cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 14px;
+        }
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 18px;
+            box-shadow: 0 5px 18px rgba(0,0,0,0.12);
+            border: 1px solid #e7ecfb;
+        }
+        .card h2 { color: #1f3276; font-size: 20px; margin-bottom: 8px; }
+        .card p { color: #556080; margin-bottom: 12px; }
+        .card a {
+            display: inline-block;
+            text-decoration: none;
+            background: #4f68d8;
+            color: white;
+            padding: 9px 12px;
+            border-radius: 8px;
+            font-weight: 700;
+        }
+        .checks {
+            margin-top: 16px;
+            background: #f3f7ff;
+            border: 1px solid #dce4fb;
+            border-radius: 10px;
+            padding: 12px;
+            color: #2b3e7c;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <header>
+        <h1>📊 Hub Dashboards KiVendTout</h1>
+        <p>Accès direct à tous les dashboards. Depuis chaque page, la navigation vers les autres dashboards est disponible en haut.</p>
+    </header>
+
+    <div class="cards">
+        <div class="card">
+            <h2>Fraude Globale</h2>
+            <p>KPI globaux, alertes, décisions analyste, checkout guard 18+.</p>
+            <a href="fraud_dashboard.html">Ouvrir</a>
+        </div>
+
+        <div class="card">
+            <h2>Types de Fraude</h2>
+            <p>Analyse dynamique des raisons (FIRST_PAYMENT, VELOCITY_HIGH, etc.).</p>
+            <a href="fraud_types_dashboard.html">Ouvrir</a>
+        </div>
+
+        <div class="card">
+            <h2>Mineurs & ID Cards</h2>
+            <p>Mineurs identifiés par ID cards et tentatives checkout bloquées.</p>
+            <a href="id_cards_dashboard.html">Ouvrir</a>
+        </div>
+    </div>
+
+    <div class="checks">
+        API attendue: <code>http://localhost:8000/health</code><br>
+        Frontend: <code>http://localhost:7600/index.html</code>
+    </div>
+</div>
+</body>
+</html>

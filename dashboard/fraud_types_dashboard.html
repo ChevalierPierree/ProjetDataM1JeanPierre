@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Types de Fraude - KiVendTout</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #5c8fe8 0%, #3b5fb3 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container { max-width: 1400px; margin: 0 auto; }
+        .top-nav {
+            background: rgba(255, 255, 255, 0.96);
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            padding: 12px 16px;
+            margin-bottom: 18px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .top-nav a {
+            text-decoration: none;
+            color: white;
+            background: #4f68d8;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.95em;
+        }
+        .top-nav a.active { background: #2f3a7a; }
+        header {
+            background: white;
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+            margin-bottom: 18px;
+        }
+        header h1 { color: #1f2e60; margin-bottom: 8px; }
+        header p { color: #58627b; }
+        .controls, .panel {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 5px 18px rgba(0,0,0,0.1);
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+        .controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+        select, button {
+            border-radius: 8px;
+            border: 1px solid #b8c3e5;
+            padding: 8px 12px;
+            font-size: 14px;
+        }
+        button {
+            background: #4f68d8;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        .cards-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+            gap: 12px;
+            margin-top: 12px;
+        }
+        .reason-card {
+            border: 1px solid #e5e9f7;
+            border-radius: 10px;
+            padding: 12px;
+            background: #f8faff;
+        }
+        .reason-card .reason { font-weight: 700; color: #1d2f6f; margin-bottom: 6px; }
+        .reason-card .total { font-size: 26px; font-weight: 800; color: #2f4ec8; }
+        .meta { color: #556080; font-size: 12px; margin-top: 5px; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+        th, td {
+            text-align: left;
+            padding: 10px;
+            border-bottom: 1px solid #edf0fa;
+        }
+        th { color: #24325f; background: #f7f9ff; }
+        .badge {
+            display: inline-block;
+            border-radius: 999px;
+            padding: 4px 10px;
+            font-size: 12px;
+            font-weight: 700;
+            color: white;
+        }
+        .HIGH { background: #d84343; }
+        .MEDIUM { background: #e19f2b; }
+        .LOW { background: #2a88d4; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="top-nav">
+        <a href="index.html">Hub Dashboards</a>
+        <a href="fraud_dashboard.html">Fraude Globale</a>
+        <a class="active" href="fraud_types_dashboard.html">Types de Fraude</a>
+        <a href="id_cards_dashboard.html">Mineurs & ID Cards</a>
+    </div>
+
+    <header>
+        <h1>🎯 Dashboard Par Type de Fraude</h1>
+        <p>Suivi dynamique des typologies de fraude détectées (refresh auto 10s)</p>
+    </header>
+
+    <div class="controls">
+        <label for="window-hours"><strong>Fenêtre:</strong></label>
+        <select id="window-hours">
+            <option value="1">1 heure</option>
+            <option value="6">6 heures</option>
+            <option value="24" selected>24 heures</option>
+            <option value="72">72 heures</option>
+        </select>
+        <label for="reason-select"><strong>Type:</strong></label>
+        <select id="reason-select"></select>
+        <button onclick="refreshRuntime()">Refresh Runtime</button>
+        <span id="runtime-status" style="color:#1f2e60;font-weight:600;">Runtime: idle</span>
+    </div>
+
+    <div class="panel">
+        <h2>Répartition des Raisons</h2>
+        <div id="reason-cards" class="cards-grid"></div>
+    </div>
+
+    <div class="panel">
+        <h2>Alertes Récentes du Type Sélectionné</h2>
+        <table>
+            <thead>
+            <tr>
+                <th>Alert ID</th>
+                <th>Client</th>
+                <th>Sévérité</th>
+                <th>Risque</th>
+                <th>Pays</th>
+                <th>Date</th>
+            </tr>
+            </thead>
+            <tbody id="alerts-body"></tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    const API_URL = `${window.location.protocol}//${window.location.hostname}:8000`;
+
+    function setRuntimeStatus(message, isError = false) {
+        const el = document.getElementById('runtime-status');
+        if (!el) return;
+        el.textContent = `Runtime: ${message}`;
+        el.style.color = isError ? '#d84343' : '#1f2e60';
+    }
+
+    function sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    async function waitForApiReady(maxSeconds = 30) {
+        for (let i = 0; i < maxSeconds; i++) {
+            try {
+                const resp = await fetch(`${API_URL}/health`, { cache: 'no-store' });
+                if (resp.ok) return true;
+            } catch (e) {
+                // API potentiellement en redémarrage
+            }
+            await sleep(1000);
+        }
+        return false;
+    }
+
+    function translateReason(reason) {
+        const translations = {
+            'FIRST_PAYMENT': 'Premier paiement',
+            'NEW_CUSTOMER': 'Nouveau client',
+            'UNUSUAL_HOUR': 'Horaire suspect',
+            'MOBILE_DEVICE': 'Appareil mobile',
+            'DIRECT_TRAFFIC': 'Trafic direct',
+            'PAYMENT_FAILED': 'Paiement échoué',
+            'VELOCITY_HIGH': 'Vélocité élevée',
+            'NEW_DEVICE': 'Nouvel appareil',
+            'UNUSUAL_AMOUNT': 'Montant inhabituel',
+            'FAST_CHECKOUT': 'Checkout rapide',
+            'GEO_MISMATCH': 'Pays différent'
+        };
+        return translations[reason] || reason;
+    }
+
+    async function loadReasonStats() {
+        const windowHours = document.getElementById('window-hours').value;
+        const response = await fetch(`${API_URL}/api/fraud/reasons/stats?window_hours=${windowHours}`);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const rows = await response.json();
+
+        const cards = document.getElementById('reason-cards');
+        if (!rows.length) {
+            cards.innerHTML = '<div>Aucune donnée pour la fenêtre sélectionnée.</div>';
+        } else {
+            cards.innerHTML = rows.map(r => `
+                <div class="reason-card">
+                    <div class="reason">${translateReason(r.reason)}</div>
+                    <div class="total">${r.total}</div>
+                    <div class="meta">HIGH ${r.high} | MEDIUM ${r.medium} | LOW ${r.low}</div>
+                </div>
+            `).join('');
+        }
+
+        const select = document.getElementById('reason-select');
+        const currentValue = select.value;
+        select.innerHTML = rows.map(r => `<option value="${r.reason}">${translateReason(r.reason)} (${r.total})</option>`).join('');
+        if (rows.some(r => r.reason === currentValue)) {
+            select.value = currentValue;
+        }
+        if (!select.value && rows.length) {
+            select.value = rows[0].reason;
+        }
+    }
+
+    async function loadReasonAlerts() {
+        const reason = document.getElementById('reason-select').value;
+        const body = document.getElementById('alerts-body');
+        if (!reason) {
+            body.innerHTML = '<tr><td colspan="6">Aucun type de fraude sélectionné.</td></tr>';
+            return;
+        }
+        const response = await fetch(`${API_URL}/api/fraud/reasons/${encodeURIComponent(reason)}/alerts?limit=80`);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const alerts = await response.json();
+        if (!alerts.length) {
+            body.innerHTML = '<tr><td colspan="6">Aucune alerte pour ce type.</td></tr>';
+            return;
+        }
+        body.innerHTML = alerts.map(a => `
+            <tr>
+                <td>${a.alert_id}</td>
+                <td>${a.customer_id || '-'}</td>
+                <td><span class="badge ${a.severity}">${a.severity}</span></td>
+                <td>${a.risk_score}/100</td>
+                <td>${a.customer_country || '-'}</td>
+                <td>${new Date(a.alert_timestamp).toLocaleString('fr-FR')}</td>
+            </tr>
+        `).join('');
+    }
+
+    async function refreshAll() {
+        try {
+            await loadReasonStats();
+            await loadReasonAlerts();
+        } catch (e) {
+            console.error(e);
+            document.getElementById('reason-cards').innerHTML = '<div>Erreur API. Vérifiez le backend.</div>';
+            document.getElementById('alerts-body').innerHTML = '<tr><td colspan="6">Erreur de chargement.</td></tr>';
+        }
+    }
+
+    async function refreshRuntime() {
+        try {
+            setRuntimeStatus('refresh runtime en cours...');
+            const response = await fetch(`${API_URL}/api/runtime/refresh`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    sync_kafka: true,
+                    run_scaling: true,
+                    restart_api: true,
+                    requests: 80,
+                    concurrency: 16,
+                    adult_order_ratio: 0.6,
+                    minor_ratio: 0.4
+                })
+            });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        } catch (e) {
+            console.warn('Refresh runtime: interruption attendue si API restart', e);
+        }
+
+        const ready = await waitForApiReady(35);
+        if (!ready) {
+            setRuntimeStatus('API non joignable après refresh', true);
+            return;
+        }
+
+        setRuntimeStatus('API relancée, scaling lancé');
+        await refreshAll();
+    }
+
+    document.getElementById('reason-select').addEventListener('change', loadReasonAlerts);
+    document.getElementById('window-hours').addEventListener('change', refreshAll);
+
+    window.addEventListener('DOMContentLoaded', () => {
+        setRuntimeStatus('idle');
+        refreshAll();
+        setInterval(refreshAll, 10000);
+    });
+</script>
+</body>
+</html>

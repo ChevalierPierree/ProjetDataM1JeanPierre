@@ -11,16 +11,21 @@ Permet de:
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from datetime import datetime, timedelta, date
 import importlib.util
 import json
 import csv
+import subprocess
+import threading
+import time
+import os
 import psycopg2
 import site
 import sys
 from pathlib import Path
 from collections import defaultdict, Counter
+from fastapi.responses import FileResponse
 
 
 def patch_kafka_vendor_six():
@@ -189,6 +194,46 @@ class CheckoutStats(BaseModel):
     avg_customer_age: float
     last_attempt_at: Optional[str] = None
 
+class CheckoutAttemptRecord(BaseModel):
+    attempt_id: int
+    attempted_at: str
+    customer_id: Optional[str] = None
+    id_card_file: Optional[str] = None
+    customer_age: Optional[int] = None
+    contains_adult_product: bool
+    blocked_underage: bool
+    accepted: bool
+    blocked_products: Optional[str] = None
+    total_amount: Optional[float] = None
+    order_id: Optional[int] = None
+    notes: Optional[str] = None
+
+class FraudReasonStat(BaseModel):
+    reason: str
+    total: int
+    high: int
+    medium: int
+    low: int
+
+class RuntimeRefreshRequest(BaseModel):
+    sync_kafka: bool = True
+    run_scaling: bool = True
+    restart_api: bool = True
+    max_sync_messages: int = Field(default=2000, ge=0, le=50000)
+    requests: int = Field(default=80, ge=1, le=5000)
+    concurrency: int = Field(default=16, ge=1, le=200)
+    adult_order_ratio: float = Field(default=0.6, ge=0.0, le=1.0)
+    minor_ratio: float = Field(default=0.4, ge=0.0, le=1.0)
+
+class RuntimeRefreshResponse(BaseModel):
+    started: bool
+    pid: Optional[int] = None
+    synced_alerts: int
+    requests: int
+    concurrency: int
+    log_file: str
+    message: str
+
 # ============================================================================
 # DATABASE
 # ============================================================================
@@ -197,6 +242,10 @@ DATASET_DIR = Path(__file__).resolve().parent.parent / "kivendtout_dataset"
 ID_CARDS_DIR = DATASET_DIR / "synthetic_id_cards"
 ID_LABELS_FILE = DATASET_DIR / "synthetic_id_labels.csv"
 ID_LABELS_CACHE = None
+BASE_DIR = Path(__file__).resolve().parent.parent
+RUNTIME_LOG_FILE = BASE_DIR / "logs" / "runtime_refresh.log"
+RUNTIME_REFRESH_LOCK = threading.Lock()
+RUNTIME_SCALING_PROCESS = None
 
 def get_db_connection():
     """Connexion PostgreSQL"""
@@ -452,6 +501,81 @@ def log_checkout_attempt(
         cursor.close()
         conn.close()
 
+def append_runtime_log(message: str):
+    """Écrit une ligne horodatée dans le log runtime refresh."""
+    try:
+        RUNTIME_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with RUNTIME_LOG_FILE.open("a", encoding="utf-8") as log_file:
+            timestamp = datetime.now().isoformat(timespec="seconds")
+            log_file.write(f"[{timestamp}] {message}\n")
+    except Exception as e:
+        print(f"Erreur écriture runtime log: {e}")
+
+def start_scaling_process(
+    requests: int,
+    concurrency: int,
+    adult_order_ratio: float,
+    minor_ratio: float
+) -> Tuple[bool, Optional[int], str]:
+    """Lance scripts/scale_order_api.py en arrière-plan si aucun run n'est actif."""
+    global RUNTIME_SCALING_PROCESS
+
+    script_path = BASE_DIR / "scripts" / "scale_order_api.py"
+    if not script_path.exists():
+        message = f"Script scaling introuvable: {script_path}"
+        append_runtime_log(message)
+        return False, None, message
+
+    with RUNTIME_REFRESH_LOCK:
+        if RUNTIME_SCALING_PROCESS is not None and RUNTIME_SCALING_PROCESS.poll() is None:
+            pid = RUNTIME_SCALING_PROCESS.pid
+            message = f"Scaling déjà en cours (pid={pid})"
+            append_runtime_log(message)
+            return False, pid, message
+
+        cmd = [
+            sys.executable,
+            str(script_path),
+            "--api-url", "http://localhost:8000",
+            "--requests", str(requests),
+            "--concurrency", str(concurrency),
+            "--adult-order-ratio", str(adult_order_ratio),
+            "--minor-ratio", str(minor_ratio),
+        ]
+
+        # Le log runtime consolide les déclenchements et sorties du scaling.
+        log_handle = RUNTIME_LOG_FILE.open("a", encoding="utf-8")
+        append_runtime_log(f"Lancement scaling: {' '.join(cmd)}")
+        process = subprocess.Popen(
+            cmd,
+            cwd=str(BASE_DIR),
+            stdout=log_handle,
+            stderr=subprocess.STDOUT,
+            start_new_session=True
+        )
+        log_handle.close()
+
+        RUNTIME_SCALING_PROCESS = process
+        message = f"Scaling lancé (pid={process.pid})"
+        append_runtime_log(message)
+        return True, process.pid, message
+
+def schedule_api_restart(delay_seconds: float = 1.2):
+    """
+    Planifie un redémarrage du process API après la réponse HTTP.
+    Utilise execv pour relancer le script courant sur le même port.
+    """
+    def _restart():
+        time.sleep(delay_seconds)
+        append_runtime_log("Redémarrage API demandé via runtime refresh")
+        script_path = Path(__file__).resolve()
+        try:
+            os.execv(sys.executable, [sys.executable, str(script_path)])
+        except Exception as e:
+            append_runtime_log(f"Erreur redémarrage API: {e}")
+
+    threading.Thread(target=_restart, daemon=True).start()
+
 # ============================================================================
 # KAFKA CONSUMER (Background sync)
 # ============================================================================
@@ -554,8 +678,14 @@ async def root():
             "identity_stats": "/api/identity/stats",
             "products": "/api/products",
             "id_cards": "/api/id-cards",
+            "id_card_image": "/api/id-cards/image/{file_name}",
             "checkout": "/api/orders/checkout",
             "checkout_stats": "/api/checkout/stats",
+            "checkout_attempts": "/api/checkout/attempts",
+            "fraud_reason_stats": "/api/fraud/reasons/stats",
+            "fraud_reason_alerts": "/api/fraud/reasons/{reason}/alerts",
+            "runtime_refresh": "/api/runtime/refresh",
+            "runtime_logs": "/api/runtime/logs",
             "stats": "/api/stats",
             "sync": "/api/sync"
         }
@@ -954,6 +1084,95 @@ async def get_id_cards(
             break
     return rows
 
+@app.get("/api/id-cards/image/{file_name}")
+async def get_id_card_image(file_name: str):
+    """Expose une image synthetic_id_card pour affichage dashboard."""
+    safe_name = Path(file_name).name
+    card_path = ID_CARDS_DIR / safe_name
+    if not card_path.exists():
+        raise HTTPException(status_code=404, detail=f"ID card image not found: {safe_name}")
+    return FileResponse(card_path)
+
+@app.get("/api/fraud/reasons/stats", response_model=List[FraudReasonStat])
+async def get_fraud_reason_stats(
+    window_hours: int = Query(24, ge=1, le=720, description="Fenêtre d'observation en heures")
+):
+    """
+    Distribution des types de fraude (raisons) pour dashboard typologies.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        WITH reason_rows AS (
+            SELECT
+                TRIM(UNNEST(string_to_array(fraud_reasons, ','))) AS reason,
+                severity
+            FROM fraud_alerts
+            WHERE fraud_reasons IS NOT NULL
+              AND fraud_reasons <> ''
+              AND alert_timestamp >= NOW() - (%s || ' hours')::INTERVAL
+        )
+        SELECT
+            reason,
+            COUNT(*)::INT AS total,
+            COALESCE(SUM(CASE WHEN severity = 'HIGH' THEN 1 ELSE 0 END), 0)::INT AS high,
+            COALESCE(SUM(CASE WHEN severity = 'MEDIUM' THEN 1 ELSE 0 END), 0)::INT AS medium,
+            COALESCE(SUM(CASE WHEN severity = 'LOW' THEN 1 ELSE 0 END), 0)::INT AS low
+        FROM reason_rows
+        GROUP BY reason
+        ORDER BY total DESC, reason ASC
+    """, (window_hours,))
+
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+
+    return [
+        FraudReasonStat(
+            reason=row[0],
+            total=row[1],
+            high=row[2],
+            medium=row[3],
+            low=row[4]
+        )
+        for row in rows
+    ]
+
+@app.get("/api/fraud/reasons/{reason}/alerts", response_model=List[FraudAlert])
+async def get_alerts_by_reason(
+    reason: str,
+    limit: int = Query(100, ge=1, le=1000)
+):
+    """
+    Alertes associées à une raison précise (ex: FIRST_PAYMENT, VELOCITY_HIGH).
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT *
+        FROM fraud_alerts
+        WHERE %s = ANY(string_to_array(fraud_reasons, ','))
+        ORDER BY alert_timestamp DESC
+        LIMIT %s
+    """, (reason, limit))
+
+    columns = [desc[0] for desc in cursor.description]
+    results = []
+
+    for row in cursor.fetchall():
+        alert_dict = dict(zip(columns, row))
+        alert_dict['fraud_reasons'] = alert_dict['fraud_reasons'].split(',') if alert_dict['fraud_reasons'] else []
+        alert_dict['alert_timestamp'] = str(alert_dict['alert_timestamp'])
+        alert_dict['event_timestamp'] = str(alert_dict['event_timestamp']) if alert_dict['event_timestamp'] else None
+        alert_dict['decided_at'] = str(alert_dict['decided_at']) if alert_dict['decided_at'] else None
+        results.append(alert_dict)
+
+    cursor.close()
+    conn.close()
+    return results
+
 @app.post("/api/orders/checkout", response_model=CheckoutResponse)
 async def create_checkout_order(payload: CheckoutRequest):
     """
@@ -1163,6 +1382,126 @@ async def get_checkout_stats(
         avg_customer_age=round(avg_customer_age, 2),
         last_attempt_at=last_attempt_at.isoformat() if last_attempt_at else None
     )
+
+@app.get("/api/checkout/attempts", response_model=List[CheckoutAttemptRecord])
+async def get_checkout_attempts(
+    blocked_underage: Optional[bool] = Query(None),
+    accepted: Optional[bool] = Query(None),
+    limit: int = Query(100, ge=1, le=1000),
+    offset: int = Query(0, ge=0)
+):
+    """
+    Historique des tentatives checkout API (support dashboard mineurs/ID cards).
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    query = """
+        SELECT
+            attempt_id, attempted_at, customer_id, id_card_file, customer_age,
+            contains_adult_product, blocked_underage, accepted, blocked_products,
+            total_amount, order_id, notes
+        FROM checkout_attempts
+        WHERE 1=1
+    """
+    params = []
+
+    if blocked_underage is not None:
+        query += " AND blocked_underage = %s"
+        params.append(blocked_underage)
+
+    if accepted is not None:
+        query += " AND accepted = %s"
+        params.append(accepted)
+
+    query += " ORDER BY attempted_at DESC LIMIT %s OFFSET %s"
+    params.extend([limit, offset])
+    cursor.execute(query, params)
+
+    records = []
+    for row in cursor.fetchall():
+        records.append(CheckoutAttemptRecord(
+            attempt_id=row[0],
+            attempted_at=str(row[1]) if row[1] else "",
+            customer_id=row[2],
+            id_card_file=row[3],
+            customer_age=row[4],
+            contains_adult_product=bool(row[5]),
+            blocked_underage=bool(row[6]),
+            accepted=bool(row[7]),
+            blocked_products=row[8],
+            total_amount=float(row[9]) if row[9] is not None else None,
+            order_id=row[10],
+            notes=row[11]
+        ))
+
+    cursor.close()
+    conn.close()
+    return records
+
+@app.post("/api/runtime/refresh", response_model=RuntimeRefreshResponse)
+async def runtime_refresh(payload: RuntimeRefreshRequest):
+    """
+    Refresh runtime unifié:
+    - sync Kafka -> PostgreSQL
+    - lancement scaling commandes API
+    - redémarrage API (optionnel)
+    """
+    synced_alerts = 0
+    started = False
+    pid = None
+    messages = []
+
+    append_runtime_log(
+        "Runtime refresh demandé "
+        f"(sync={payload.sync_kafka}, scaling={payload.run_scaling}, restart_api={payload.restart_api}, "
+        f"requests={payload.requests}, concurrency={payload.concurrency})"
+    )
+
+    if payload.sync_kafka:
+        synced_alerts = sync_alerts_from_kafka(max_messages=payload.max_sync_messages)
+        messages.append(f"sync={synced_alerts}")
+    else:
+        messages.append("sync=skipped")
+
+    if payload.run_scaling:
+        started, pid, scaling_message = start_scaling_process(
+            requests=payload.requests,
+            concurrency=payload.concurrency,
+            adult_order_ratio=payload.adult_order_ratio,
+            minor_ratio=payload.minor_ratio
+        )
+        messages.append(scaling_message)
+    else:
+        messages.append("scaling skipped")
+
+    if payload.restart_api:
+        schedule_api_restart()
+        messages.append("API restart planifié")
+    else:
+        messages.append("API restart désactivé")
+
+    return RuntimeRefreshResponse(
+        started=started,
+        pid=pid,
+        synced_alerts=synced_alerts,
+        requests=payload.requests,
+        concurrency=payload.concurrency,
+        log_file=str(RUNTIME_LOG_FILE),
+        message=" | ".join(messages)
+    )
+
+@app.get("/api/runtime/logs")
+async def runtime_logs(
+    lines: int = Query(80, ge=1, le=500)
+):
+    """Retourne les dernières lignes du log runtime refresh."""
+    if not RUNTIME_LOG_FILE.exists():
+        return {"log_file": str(RUNTIME_LOG_FILE), "lines": []}
+
+    with RUNTIME_LOG_FILE.open("r", encoding="utf-8") as f:
+        rows = f.read().splitlines()
+    return {"log_file": str(RUNTIME_LOG_FILE), "lines": rows[-lines:]}
 
 @app.post("/api/sync")
 async def sync_from_kafka():
