@@ -307,19 +307,22 @@
             <div class="stat-card">
                 <h3>📊 Total Alertes</h3>
                 <div class="value" id="total-alerts">-</div>
+                <p style="font-size: 0.75em; color: #999; margin-top: 5px;">Règles de fraude déclenchées</p>
             </div>
             <div class="stat-card">
-                <h3>🚨 Taux de Fraude</h3>
+                <h3>🚨 Taux de Fraude Paiements</h3>
                 <div class="value" id="fraud-rate">-%</div>
-                <p style="font-size: 0.75em; color: #999; margin-top: 5px;">Alertes / Paiements traités</p>
+                <p style="font-size: 0.75em; color: #999; margin-top: 5px;" id="fraud-rate-note">Paiements frauduleux / Paiements traités</p>
             </div>
             <div class="stat-card">
-                <h3>🔴 Sévérité HAUTE</h3>
-                <div class="value" id="high-severity" style="color: #e74c3c;">-</div>
+                <h3>💸 Paiements Frauduleux</h3>
+                <div class="value" id="fraud-payments" style="color: #e74c3c;">-</div>
+                <p style="font-size: 0.75em; color: #999; margin-top: 5px;" id="fraud-coverage-note">Clients alertés / Clients totaux</p>
             </div>
             <div class="stat-card">
                 <h3>⏳ En Attente</h3>
                 <div class="value" id="pending-review" style="color: #f39c12;">-</div>
+                <p style="font-size: 0.75em; color: #999; margin-top: 5px;" id="high-severity-note">dont sévérité haute: 0</p>
             </div>
         </div>
 
@@ -356,7 +359,7 @@
     </div>
 
     <script>
-        const API_URL = 'http://localhost:8000';
+        const API_URL = `${window.location.protocol}//${window.location.hostname}:8000`;
 
         // Charger les stats
         async function loadStats() {
@@ -366,8 +369,23 @@
 
                 document.getElementById('total-alerts').textContent = stats.total_alerts;
                 document.getElementById('fraud-rate').textContent = stats.fraud_rate.toFixed(2) + '%';
-                document.getElementById('high-severity').textContent = stats.alerts_by_severity.HIGH || 0;
+                document.getElementById('fraud-payments').textContent = stats.fraudulent_payments || 0;
                 document.getElementById('pending-review').textContent = stats.alerts_by_status.PENDING_REVIEW || 0;
+
+                const totalPayments = stats.total_payments || 0;
+                const fraudulentPayments = stats.fraudulent_payments || 0;
+                document.getElementById('fraud-rate-note').textContent =
+                    `${fraudulentPayments}/${totalPayments} paiements frauduleux labelisés`;
+
+                const alertedCustomers = stats.alerted_customers || 0;
+                const totalCustomers = stats.total_customers || 0;
+                const coverage = stats.customer_alert_coverage || 0;
+                document.getElementById('fraud-coverage-note').textContent =
+                    `${alertedCustomers}/${totalCustomers} clients alertés (${coverage.toFixed(2)}%)`;
+
+                const highSeverity = stats.alerts_by_severity.HIGH || 0;
+                document.getElementById('high-severity-note').textContent =
+                    `dont sévérité haute: ${highSeverity}`;
             } catch (error) {
                 console.error('Erreur chargement stats:', error);
             }

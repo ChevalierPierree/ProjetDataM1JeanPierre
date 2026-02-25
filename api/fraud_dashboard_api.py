@@ -108,6 +108,11 @@ class FraudStats(BaseModel):
     alerts_by_severity: dict
     alerts_by_status: dict
     fraud_rate: float
+    total_payments: int
+    fraudulent_payments: int
+    alerted_customers: int
+    total_customers: int
+    customer_alert_coverage: float
     top_fraud_reasons: List[dict]
     alerts_by_hour: List[dict]
     alerts_by_day: List[dict]
@@ -480,11 +485,21 @@ async def get_stats():
     cursor.execute("SELECT status, COUNT(*) FROM fraud_alerts GROUP BY status")
     alerts_by_status = dict(cursor.fetchall())
     
-    # Fraud rate = alertes / paiements connus
+    # Volume de paiements
     cursor.execute("SELECT COUNT(*) FROM payments")
     total_payments = cursor.fetchone()[0]
-    base = total_payments if total_payments > 0 else max(total_alerts, 1)
-    fraud_rate = round((total_alerts / base) * 100, 2)
+    cursor.execute("SELECT COUNT(*) FROM payments WHERE is_fraudulent = true")
+    fraudulent_payments = cursor.fetchone()[0]
+
+    # Taux de fraude cohérent métier: paiements frauduleux / paiements totaux
+    fraud_rate = round((fraudulent_payments / total_payments) * 100, 2) if total_payments > 0 else 0.0
+
+    # Couverture client des alertes (utile pour contextualiser le volume d'alertes)
+    cursor.execute("SELECT COUNT(*) FROM customers")
+    total_customers = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(DISTINCT customer_id) FROM fraud_alerts WHERE customer_id IS NOT NULL")
+    alerted_customers = cursor.fetchone()[0]
+    customer_alert_coverage = round((alerted_customers / total_customers) * 100, 2) if total_customers > 0 else 0.0
     
     # Top fraud reasons
     cursor.execute("SELECT fraud_reasons FROM fraud_alerts")
@@ -527,7 +542,12 @@ async def get_stats():
         total_alerts=total_alerts,
         alerts_by_severity=alerts_by_severity,
         alerts_by_status=alerts_by_status,
-        fraud_rate=round(fraud_rate, 2),
+        fraud_rate=fraud_rate,
+        total_payments=total_payments,
+        fraudulent_payments=fraudulent_payments,
+        alerted_customers=alerted_customers,
+        total_customers=total_customers,
+        customer_alert_coverage=customer_alert_coverage,
         top_fraud_reasons=top_fraud_reasons,
         alerts_by_hour=alerts_by_hour,
         alerts_by_day=alerts_by_day
