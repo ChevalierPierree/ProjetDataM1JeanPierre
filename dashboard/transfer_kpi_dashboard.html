@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KPI Transfert - KiVendTout</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(140deg, #4e79b8 0%, #243f6b 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container { max-width: 1450px; margin: 0 auto; }
+        .top-nav {
+            background: rgba(255, 255, 255, 0.96);
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            padding: 12px 16px;
+            margin-bottom: 18px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .top-nav a {
+            text-decoration: none;
+            color: white;
+            background: #4f68d8;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.95em;
+        }
+        .top-nav a.active { background: #2f3a7a; }
+        header {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+            padding: 22px;
+            margin-bottom: 16px;
+        }
+        header h1 { color: #17315f; margin-bottom: 8px; }
+        header p { color: #4f5f86; }
+        .controls {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 5px 18px rgba(0,0,0,0.1);
+            padding: 14px;
+            margin-bottom: 16px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        select, button {
+            border-radius: 8px;
+            border: 1px solid #b8c3e5;
+            padding: 8px 12px;
+            font-size: 14px;
+        }
+        button {
+            background: #4f68d8;
+            color: white;
+            border: none;
+            font-weight: 700;
+            cursor: pointer;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        .card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 5px 18px rgba(0,0,0,0.1);
+            padding: 16px;
+        }
+        .card .label { color: #556280; font-size: 13px; margin-bottom: 6px; }
+        .card .value { font-size: 30px; font-weight: 800; color: #1a3f8a; }
+        .panel {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 5px 18px rgba(0,0,0,0.1);
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+        .panel h2 { color: #1b2f60; margin-bottom: 10px; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+        th, td {
+            text-align: left;
+            padding: 10px;
+            border-bottom: 1px solid #edf1fb;
+        }
+        th { background: #f6f8ff; color: #20325d; }
+        .badge {
+            display: inline-block;
+            border-radius: 999px;
+            padding: 4px 10px;
+            font-size: 12px;
+            font-weight: 700;
+            color: white;
+            background: #2f63c7;
+        }
+        .readable-list {
+            margin: 8px 0 0 18px;
+            color: #24395f;
+            line-height: 1.4;
+        }
+        .status-pill {
+            display: inline-block;
+            margin-top: 8px;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 700;
+            color: #fff;
+            background: #2f63c7;
+        }
+        .status-pill.warning { background: #d38a11; }
+        .status-pill.error { background: #c43f3f; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="top-nav">
+        <a href="index.html">Hub Dashboards</a>
+        <a href="fraud_dashboard.html">Fraude Globale</a>
+        <a href="fraud_types_dashboard.html">Types de Fraude</a>
+        <a href="id_cards_dashboard.html">Mineurs & ID Cards</a>
+        <a class="active" href="transfer_kpi_dashboard.html">KPI Transfert</a>
+    </div>
+
+    <header>
+        <h1>🚚 Dashboard KPI de Transfert</h1>
+        <p>Suivi standardisé latence/capacité/vitesse pour snapshots Data Lake et flux micro-batch (refresh auto 10s)</p>
+    </header>
+
+    <div class="controls">
+        <label for="kpi-limit"><strong>Historique KPI:</strong></label>
+        <select id="kpi-limit">
+            <option value="100">100 points</option>
+            <option value="300" selected>300 points</option>
+            <option value="1000">1000 points</option>
+        </select>
+        <label for="window-hours"><strong>Fenêtre micro-batch:</strong></label>
+        <select id="window-hours">
+            <option value="1">1h</option>
+            <option value="6">6h</option>
+            <option value="24" selected>24h</option>
+            <option value="72">72h</option>
+        </select>
+        <button onclick="refreshAll()">Refresh</button>
+        <span id="status" style="color:#1b2f60;font-weight:600;">Status: idle</span>
+    </div>
+
+    <div class="panel">
+        <h2>Lecture rapide des KPI</h2>
+        <div class="grid">
+            <div class="card">
+                <div class="label">Fraude - synthèse</div>
+                <div class="value" id="readable-fraud-headline" style="font-size:20px;">-</div>
+                <span class="status-pill" id="readable-fraud-level">-</span>
+            </div>
+            <div class="card">
+                <div class="label">Transfert - synthèse</div>
+                <div class="value" id="readable-transfer-headline" style="font-size:20px;">-</div>
+                <span class="status-pill" id="readable-transfer-level">-</span>
+            </div>
+            <div class="card">
+                <div class="label">Snapshot Data Lake (dernier)</div>
+                <div class="value" id="readable-snapshot-size" style="font-size:20px;">-</div>
+                <div class="label" id="readable-snapshot-meta">-</div>
+            </div>
+            <div class="card">
+                <div class="label">Micro-batch (fenêtre)</div>
+                <div class="value" id="readable-micro-events" style="font-size:20px;">-</div>
+                <div class="label" id="readable-micro-meta">-</div>
+            </div>
+        </div>
+        <ul id="readable-insights" class="readable-list"></ul>
+    </div>
+
+    <div class="grid">
+        <div class="card">
+            <div class="label">Latence moyenne (normalisée)</div>
+            <div class="value" id="avg-latency">-</div>
+        </div>
+        <div class="card">
+            <div class="label">Capacité moyenne (normalisée)</div>
+            <div class="value" id="avg-capacity">-</div>
+        </div>
+        <div class="card">
+            <div class="label">Vitesse moyenne (normalisée)</div>
+            <div class="value" id="avg-speed">-</div>
+        </div>
+        <div class="card">
+            <div class="label">Points KPI disponibles</div>
+            <div class="value" id="kpi-points">-</div>
+        </div>
+    </div>
+
+    <div class="panel">
+        <h2>Métriques par pipeline</h2>
+        <div id="metric-counters"></div>
+    </div>
+
+    <div class="panel">
+        <h2>Flux micro-batch MongoDB → PostgreSQL</h2>
+        <table>
+            <thead>
+            <tr>
+                <th>Fenêtre</th>
+                <th>Events</th>
+                <th>Latence moyenne</th>
+                <th>Vitesse moyenne</th>
+                <th>Dernier batch</th>
+            </tr>
+            </thead>
+            <tbody id="micro-batch-body"></tbody>
+        </table>
+    </div>
+
+    <div class="panel">
+        <h2>Historique KPI transfert</h2>
+        <table>
+            <thead>
+            <tr>
+                <th>Timestamp</th>
+                <th>Metric</th>
+                <th>Latence</th>
+                <th>Capacité</th>
+                <th>Vitesse</th>
+            </tr>
+            </thead>
+            <tbody id="kpi-body"></tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    const API_URL = `${window.location.protocol}//${window.location.hostname}:8000`;
+
+    function fmt(value, digits = 2) {
+        if (value === null || value === undefined || Number.isNaN(Number(value))) return '-';
+        return Number(value).toFixed(digits);
+    }
+
+    function formatPill(el, level) {
+        const label = level || '-';
+        el.textContent = label;
+        el.classList.remove('warning', 'error');
+        if (['modere', 'moyenne', 'inactif'].includes(label)) {
+            el.classList.add('warning');
+        } else if (['eleve', 'aucune_donnee'].includes(label)) {
+            el.classList.add('error');
+        }
+    }
+
+    function setStatus(message, isError = false) {
+        const el = document.getElementById('status');
+        el.textContent = `Status: ${message}`;
+        el.style.color = isError ? '#c43f3f' : '#1b2f60';
+    }
+
+    async function loadTransferKpis() {
+        const limit = document.getElementById('kpi-limit').value;
+        const resp = await fetch(`${API_URL}/api/transfer/kpis?limit=${limit}`);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status} on transfer kpis`);
+        const data = await resp.json();
+
+        document.getElementById('kpi-points').textContent = data.points ?? 0;
+        document.getElementById('avg-latency').textContent = data.summary?.avg_latency ?? '-';
+        document.getElementById('avg-capacity').textContent = data.summary?.avg_capacity ?? '-';
+        document.getElementById('avg-speed').textContent = data.summary?.avg_speed ?? '-';
+
+        const metricCounters = document.getElementById('metric-counters');
+        const counters = data.metrics_count || {};
+        const entries = Object.entries(counters);
+        if (!entries.length) {
+            metricCounters.innerHTML = 'Aucune métrique disponible.';
+        } else {
+            metricCounters.innerHTML = entries
+                .map(([metric, count]) => `<span class="badge">${metric}: ${count}</span>`)
+                .join(' ');
+        }
+
+        const rows = data.kpis || [];
+        const body = document.getElementById('kpi-body');
+        if (!rows.length) {
+            body.innerHTML = '<tr><td colspan="5">Aucun point KPI.</td></tr>';
+            return;
+        }
+
+        body.innerHTML = rows.slice().reverse().map(row => `
+            <tr>
+                <td>${row.timestamp_utc ? new Date(row.timestamp_utc).toLocaleString('fr-FR') : '-'}</td>
+                <td>${row.metric || '-'}</td>
+                <td>${row.latency_value ?? '-'} ${row.latency_unit || ''}</td>
+                <td>${row.capacity_value ?? '-'} ${row.capacity_unit || ''}</td>
+                <td>${row.speed_value ?? '-'} ${row.speed_unit || ''}</td>
+            </tr>
+        `).join('');
+    }
+
+    async function loadMicroBatch() {
+        const windowHours = document.getElementById('window-hours').value;
+        const resp = await fetch(`${API_URL}/api/micro-batch/stats?window_hours=${windowHours}&limit=200`);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status} on micro batch`);
+        const data = await resp.json();
+        const summary = data.summary || {};
+        const body = document.getElementById('micro-batch-body');
+        body.innerHTML = `
+            <tr>
+                <td>${windowHours}h</td>
+                <td>${summary.total_events ?? 0}</td>
+                <td>${fmt(summary.avg_latency_ms)} ms</td>
+                <td>${fmt(summary.avg_speed_events_per_sec)} events/s</td>
+                <td>${summary.latest_batch_ended_at ? new Date(summary.latest_batch_ended_at).toLocaleString('fr-FR') : '-'}</td>
+            </tr>
+        `;
+    }
+
+    async function loadReadableKpis() {
+        const limit = document.getElementById('kpi-limit').value;
+        const windowHours = document.getElementById('window-hours').value;
+        const resp = await fetch(`${API_URL}/api/kpis/readable?limit=${limit}&micro_batch_window_hours=${windowHours}`);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status} on readable kpis`);
+        const data = await resp.json();
+
+        const fraud = data.fraud || {};
+        const transfer = data.transfer || {};
+        const transferKpis = transfer.kpis || {};
+
+        document.getElementById('readable-fraud-headline').textContent = fraud.headline || '-';
+        document.getElementById('readable-transfer-headline').textContent = transfer.headline || '-';
+        formatPill(document.getElementById('readable-fraud-level'), fraud.risk_level || '-');
+        formatPill(document.getElementById('readable-transfer-level'), transfer.micro_batch_status || '-');
+
+        document.getElementById('readable-snapshot-size').textContent = transferKpis.latest_snapshot_size_human || '-';
+        document.getElementById('readable-snapshot-meta').textContent =
+            `${transferKpis.latest_snapshot_files ?? '-'} fichiers • ${transferKpis.latest_snapshot_latency_seconds ?? '-'} s`;
+
+        document.getElementById('readable-micro-events').textContent =
+            `${transferKpis.micro_batch_total_events_window ?? 0} event(s)`;
+        document.getElementById('readable-micro-meta').textContent =
+            `latence moy ${transferKpis.micro_batch_avg_latency_ms_window ?? '-'} ms`;
+
+        const insights = []
+            .concat(Array.isArray(fraud.interpretation) ? fraud.interpretation : [])
+            .concat(Array.isArray(transfer.interpretation) ? transfer.interpretation : []);
+        const insightsEl = document.getElementById('readable-insights');
+        if (!insights.length) {
+            insightsEl.innerHTML = '<li>Aucune interpretation disponible.</li>';
+        } else {
+            insightsEl.innerHTML = insights.map(item => `<li>${item}</li>`).join('');
+        }
+    }
+
+    async function refreshAll() {
+        try {
+            setStatus('refresh...');
+            await Promise.all([loadTransferKpis(), loadMicroBatch(), loadReadableKpis()]);
+            setStatus('ok');
+        } catch (err) {
+            console.error(err);
+            setStatus('erreur API', true);
+        }
+    }
+
+    document.getElementById('kpi-limit').addEventListener('change', refreshAll);
+    document.getElementById('window-hours').addEventListener('change', refreshAll);
+
+    window.addEventListener('DOMContentLoaded', () => {
+        refreshAll();
+        setInterval(refreshAll, 10000);
+    });
+</script>
+</body>
+</html>

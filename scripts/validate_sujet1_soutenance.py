@@ -36,6 +36,16 @@ class CheckResult:
     details: Dict
 
 
+def api_headers() -> Dict[str, str]:
+    header_name = os.getenv("API_KEY_HEADER", "X-API-Key").strip()
+    header_value = os.getenv("API_KEY_VALUE", "").strip()
+    if not header_value:
+        header_value = os.getenv("API_DEFAULT_DEMO_KEY", "demo-admin-key").strip()
+    if header_name and header_value:
+        return {header_name: header_value}
+    return {}
+
+
 def run_cmd(cmd: List[str], timeout: int = 240, env: Optional[Dict[str, str]] = None) -> Tuple[int, str, str]:
     proc = subprocess.run(
         cmd,
@@ -85,9 +95,10 @@ def parse_float(pattern: str, text: str, default: float = -1.0) -> float:
 
 def latency_probe(url: str, attempts: int = 15) -> Dict:
     latencies_ms: List[float] = []
+    headers = api_headers()
     for _ in range(attempts):
         started = time.perf_counter()
-        resp = requests.get(url, timeout=10)
+        resp = requests.get(url, timeout=10, headers=headers)
         elapsed = (time.perf_counter() - started) * 1000.0
         resp.raise_for_status()
         latencies_ms.append(elapsed)
@@ -104,6 +115,7 @@ def latency_probe(url: str, attempts: int = 15) -> Dict:
 def launch_temp_secured_api() -> Tuple[subprocess.Popen, Dict]:
     env = os.environ.copy()
     env["API_KEY_REQUIRED"] = "true"
+    env["API_RBAC_ENABLED"] = "false"
     env["API_KEY_VALUE"] = "soutenance-demo-key"
     env["API_KEY_HEADER"] = "X-API-Key"
     cmd = [
@@ -150,6 +162,7 @@ def main() -> int:
 
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     checks: List[CheckResult] = []
+    headers = api_headers()
 
     # #1 Stockage relationnel intègre.
     with pg_conn() as conn:
@@ -208,7 +221,7 @@ def main() -> int:
     )
 
     # #4 Analyse fraud temps réel.
-    fraud_stats = requests.get(f"{API_URL}/api/fraud/reasons/stats?window_hours=24", timeout=15).json()
+    fraud_stats = requests.get(f"{API_URL}/api/fraud/reasons/stats?window_hours=24", timeout=15, headers=headers).json()
     checks.append(
         CheckResult(
             requirement_id=4,
@@ -228,9 +241,9 @@ def main() -> int:
     endpoint_status = {}
     for ep in endpoints:
         if ep.endswith("/checkout"):
-            resp = requests.options(f"{API_URL}{ep}", timeout=10)
+            resp = requests.options(f"{API_URL}{ep}", timeout=10, headers=headers)
         else:
-            resp = requests.get(f"{API_URL}{ep}", timeout=10)
+            resp = requests.get(f"{API_URL}{ep}", timeout=10, headers=headers)
         endpoint_status[ep] = resp.status_code
     checks.append(
         CheckResult(
@@ -362,20 +375,42 @@ def main() -> int:
     )
     model_acc = parse_float(r"Accuracy\s*:\s*([0-9.]+)%", model_out, default=0.0)
 
+    adult_product_id = 7
+    adult_product_meta: Dict[str, object] = {}
+    try:
+        adult_products_resp = requests.get(
+            f"{API_URL}/api/products?adult_only=true&only_in_stock=true&limit=1000",
+            timeout=15,
+            headers=headers,
+        )
+        if adult_products_resp.status_code == 200:
+            adult_products = adult_products_resp.json() or []
+            if adult_products:
+                first_product = max(adult_products, key=lambda p: int(p.get("stock_quantity", 0)))
+                adult_product_id = int(first_product.get("product_id", adult_product_id))
+                adult_product_meta = {
+                    "selected_adult_product_id": adult_product_id,
+                    "selected_adult_product_name": first_product.get("name"),
+                    "selected_adult_product_stock": first_product.get("stock_quantity"),
+                    "adult_products_available": len(adult_products),
+                }
+    except Exception as exc:
+        adult_product_meta = {"selected_adult_product_error": str(exc)}
+
     minor_payload = {
         "customer_id": "C00010",
         "id_card_file": "id_0003.png",
-        "items": [{"product_id": 7, "quantity": 1}],
+        "items": [{"product_id": adult_product_id, "quantity": 1}],
         "payment_method": "card",
     }
     adult_payload = {
         "customer_id": "C00010",
         "id_card_file": "id_0000.png",
-        "items": [{"product_id": 7, "quantity": 1}],
+        "items": [{"product_id": adult_product_id, "quantity": 1}],
         "payment_method": "card",
     }
-    minor_resp = requests.post(f"{API_URL}/api/orders/checkout", json=minor_payload, timeout=15)
-    adult_resp = requests.post(f"{API_URL}/api/orders/checkout", json=adult_payload, timeout=15)
+    minor_resp = requests.post(f"{API_URL}/api/orders/checkout", json=minor_payload, timeout=15, headers=headers)
+    adult_resp = requests.post(f"{API_URL}/api/orders/checkout", json=adult_payload, timeout=15, headers=headers)
     checks.append(
         CheckResult(
             requirement_id=11,
@@ -386,6 +421,7 @@ def main() -> int:
                 "model_accuracy_percent": model_acc,
                 "minor_checkout_status": minor_resp.status_code,
                 "adult_checkout_status": adult_resp.status_code,
+                **adult_product_meta,
                 "model_stderr_tail": model_err[-300:],
             },
         )

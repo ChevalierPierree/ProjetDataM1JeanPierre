@@ -58,14 +58,17 @@ Tests réalisés:
   - `0` erreur HTTP/réseau,
   - `mineur+adult acceptés = 0`.
 
-## 5) Ecart résiduel (important)
+## 5) Ecart résiduel (mis à jour)
 
-Pour être strictement "lecture directe depuis image":
-- l'implémentation actuelle lit la date de naissance depuis le fichier labels du dataset des `id.png`.
-- c'est robuste pour le projet pédagogique, mais ce n'est pas un OCR direct image.
+Etat actuel:
+- une reconnaissance CNI basée empreinte image (SHA-256) est maintenant intégrée,
+- fallback labels conservé pour robustesse.
 
-Amélioration proposée:
-- ajouter une brique OCR optionnelle (Tesseract/OpenCV) avec fallback vers labels.
+Ecart restant:
+- ce n'est pas un OCR texte "in-image" (MRZ/zone imprimée), mais une reconnaissance de carte sur dataset contrôlé.
+
+Amélioration proposée (optionnelle):
+- ajouter une brique OCR (Tesseract/OpenCV) en complément, avec fallback modèle+labels.
 
 ## 6) Commandes d'utilisation
 

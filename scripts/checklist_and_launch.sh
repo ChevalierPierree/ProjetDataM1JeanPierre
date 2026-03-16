@@ -134,9 +134,12 @@ main() {
   run_check "Page fraude globale accessible" "curl -fsS -m 5 http://localhost:${DASHBOARD_PORT}/fraud_dashboard.html"
   run_check "Page types fraude accessible" "curl -fsS -m 5 http://localhost:${DASHBOARD_PORT}/fraud_types_dashboard.html"
   run_check "Page ID cards accessible" "curl -fsS -m 5 http://localhost:${DASHBOARD_PORT}/id_cards_dashboard.html"
+  run_check "Page KPI transfert accessible" "curl -fsS -m 5 http://localhost:${DASHBOARD_PORT}/transfer_kpi_dashboard.html"
   run_check "API /health accessible" "curl -fsS -m 5 http://localhost:${API_PORT}/health"
   run_check "API /stats accessible" "curl -fsS -m 5 http://localhost:${API_PORT}/api/stats"
   run_check "API /checkout/stats accessible" "curl -fsS -m 5 \"http://localhost:${API_PORT}/api/checkout/stats?window_hours=24\""
+  run_check "API /micro-batch/stats accessible" "curl -fsS -m 5 \"http://localhost:${API_PORT}/api/micro-batch/stats?window_hours=24\""
+  run_check "API /transfer/kpis accessible" "curl -fsS -m 5 \"http://localhost:${API_PORT}/api/transfer/kpis?limit=20\""
   run_check "API /runtime/logs accessible" "curl -fsS -m 5 \"http://localhost:${API_PORT}/api/runtime/logs?lines=5\""
 
   echo
@@ -151,6 +154,7 @@ main() {
   echo "- Fraude:    http://localhost:${DASHBOARD_PORT}/fraud_dashboard.html"
   echo "- Types:     http://localhost:${DASHBOARD_PORT}/fraud_types_dashboard.html"
   echo "- ID Cards:  http://localhost:${DASHBOARD_PORT}/id_cards_dashboard.html"
+  echo "- KPI Xfer:  http://localhost:${DASHBOARD_PORT}/transfer_kpi_dashboard.html"
   echo "- API Health:http://localhost:${API_PORT}/health"
   echo
   echo "Logs:"

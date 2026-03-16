@@ -16,6 +16,7 @@ from datetime import datetime, timedelta, date
 import importlib.util
 import json
 import csv
+import fnmatch
 import subprocess
 import threading
 import time
@@ -27,7 +28,7 @@ import psycopg2
 import site
 import sys
 from pathlib import Path
-from collections import defaultdict, Counter
+from collections import defaultdict, Counter, deque
 from fastapi.responses import FileResponse, JSONResponse
 from uuid import uuid4
 
@@ -291,15 +292,26 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 ID_FINGERPRINT_MODEL_FILE = BASE_DIR / "models" / "id_card_fingerprint_model.json"
 ID_FINGERPRINT_MODEL_CACHE = None
 RUNTIME_LOG_FILE = BASE_DIR / "logs" / "runtime_refresh.log"
+TRANSFER_KPI_HISTORY_FILE = BASE_DIR / "logs" / "transfer_kpi_history.jsonl"
 RUNTIME_REFRESH_LOCK = threading.Lock()
 RUNTIME_SCALING_PROCESS = None
 RUNTIME_ALERTS_PROCESS = None
+API_ACCESS_CONTROL_FILE = Path(
+    os.getenv("API_ACCESS_CONTROL_FILE", str(BASE_DIR / "config" / "api_access_control.json"))
+)
+API_ACCESS_CONTROL_CACHE = None
+API_ACCESS_CONTROL_MTIME = None
+API_RATE_LIMIT_LOCK = threading.Lock()
+API_RATE_LIMIT_STATE = defaultdict(deque)
 
 API_KEY_REQUIRED = os.getenv("API_KEY_REQUIRED", "false").strip().lower() in {"1", "true", "yes", "on"}
 API_KEY_HEADER = os.getenv("API_KEY_HEADER", "X-API-Key")
 API_KEY_VALUE = os.getenv("API_KEY_VALUE", "")
 API_KEY_EXEMPT_PATH_PREFIXES = ("/docs", "/redoc", "/openapi.json", "/health")
 DOCUMENT_HASH_SALT = os.getenv("DOCUMENT_HASH_SALT", "kivendtout-dev-salt")
+API_RBAC_ENABLED = os.getenv("API_RBAC_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"}
+API_RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("API_RATE_LIMIT_WINDOW_SECONDS", "60"))
+API_RATE_LIMIT_MAX_REQUESTS = int(os.getenv("API_RATE_LIMIT_MAX_REQUESTS", "120"))
 
 FRAUD_REASON_POOL = [
     "FIRST_PAYMENT",
@@ -316,32 +328,271 @@ FRAUD_REASON_POOL = [
 ]
 
 
+def _normalize_quota(quota_payload: Optional[dict]) -> dict:
+    quota_payload = quota_payload or {}
+    window_seconds = int(quota_payload.get("window_seconds", API_RATE_LIMIT_WINDOW_SECONDS))
+    max_requests = int(quota_payload.get("max_requests", API_RATE_LIMIT_MAX_REQUESTS))
+    return {
+        "window_seconds": max(1, window_seconds),
+        "max_requests": max(1, max_requests),
+    }
+
+
+def _default_api_access_control() -> dict:
+    role_permissions = {
+        "admin": ["*"],
+        "analyst": [
+            "GET:/api/alerts*",
+            "GET:/api/stats*",
+            "GET:/api/fraud/*",
+            "GET:/api/identity/*",
+            "GET:/api/checkout/*",
+            "GET:/api/products*",
+            "GET:/api/id-cards*",
+            "GET:/api/micro-batch/*",
+            "GET:/api/transfer/*",
+            "GET:/api/kpis/*",
+        ],
+        "partner": [
+            "GET:/api/products*",
+            "POST:/api/orders/checkout",
+            "GET:/api/checkout/stats*",
+        ],
+    }
+    keys = []
+    if API_KEY_VALUE:
+        keys.append(
+            {
+                "key_id": "legacy-admin",
+                "user": "legacy",
+                "role": "admin",
+                "key": API_KEY_VALUE,
+            }
+        )
+    return {
+        "default_quota": _normalize_quota({}),
+        "role_permissions": role_permissions,
+        "keys": keys,
+    }
+
+
+def load_api_access_control() -> dict:
+    global API_ACCESS_CONTROL_CACHE, API_ACCESS_CONTROL_MTIME
+
+    try:
+        mtime = API_ACCESS_CONTROL_FILE.stat().st_mtime
+    except FileNotFoundError:
+        API_ACCESS_CONTROL_CACHE = _default_api_access_control()
+        API_ACCESS_CONTROL_MTIME = None
+        return API_ACCESS_CONTROL_CACHE
+
+    if API_ACCESS_CONTROL_CACHE is not None and API_ACCESS_CONTROL_MTIME == mtime:
+        return API_ACCESS_CONTROL_CACHE
+
+    try:
+        payload = json.loads(API_ACCESS_CONTROL_FILE.read_text(encoding="utf-8"))
+    except Exception as e:
+        print(f"Erreur lecture API access control, fallback defaults: {e}")
+        payload = _default_api_access_control()
+
+    role_permissions = payload.get("role_permissions") or {}
+    keys = payload.get("keys") or []
+    default_quota = _normalize_quota(payload.get("default_quota"))
+
+    normalized_keys = []
+    for row in keys:
+        if not isinstance(row, dict):
+            continue
+        key_id = (row.get("key_id") or row.get("user") or f"key-{len(normalized_keys)+1}").strip()
+        if not key_id:
+            continue
+
+        raw_key = (row.get("key") or "").strip()
+        key_sha256 = (row.get("key_sha256") or "").strip().lower()
+        if not raw_key and not key_sha256:
+            continue
+        if raw_key and not key_sha256:
+            key_sha256 = hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
+
+        normalized_keys.append(
+            {
+                "key_id": key_id,
+                "user": (row.get("user") or key_id).strip(),
+                "role": (row.get("role") or "partner").strip(),
+                "key": raw_key,
+                "key_sha256": key_sha256,
+                "quota": _normalize_quota(row.get("quota")),
+                "permissions": row.get("permissions") or [],
+            }
+        )
+
+    API_ACCESS_CONTROL_CACHE = {
+        "default_quota": default_quota,
+        "role_permissions": role_permissions,
+        "keys": normalized_keys,
+    }
+    API_ACCESS_CONTROL_MTIME = mtime
+    return API_ACCESS_CONTROL_CACHE
+
+
+def _permission_match(permission: str, method: str, path: str) -> bool:
+    permission = (permission or "").strip()
+    if not permission:
+        return False
+    if permission == "*":
+        return True
+
+    if ":" in permission:
+        perm_method, perm_path = permission.split(":", 1)
+    else:
+        perm_method, perm_path = "*", permission
+
+    perm_method = perm_method.strip().upper() or "*"
+    perm_path = perm_path.strip() or "*"
+
+    if perm_method != "*" and perm_method != method.upper():
+        return False
+    return fnmatch.fnmatch(path, perm_path)
+
+
+def _principal_permissions(principal: dict, access_control: dict) -> List[str]:
+    direct_permissions = principal.get("permissions") or []
+    if direct_permissions:
+        return [str(p) for p in direct_permissions]
+
+    role = principal.get("role", "partner")
+    role_permissions = access_control.get("role_permissions", {})
+    return [str(p) for p in role_permissions.get(role, [])]
+
+
+def resolve_api_principal(provided_key: str) -> Optional[dict]:
+    if not provided_key:
+        return None
+
+    access_control = load_api_access_control()
+    provided_hash = hashlib.sha256(provided_key.encode("utf-8")).hexdigest()
+
+    for row in access_control.get("keys", []):
+        stored_raw = (row.get("key") or "").strip()
+        stored_hash = (row.get("key_sha256") or "").strip().lower()
+        if stored_raw and hmac.compare_digest(stored_raw, provided_key):
+            return row
+        if stored_hash and hmac.compare_digest(stored_hash, provided_hash):
+            return row
+    return None
+
+
+def enforce_rate_limit(principal: dict, default_quota: dict) -> Tuple[bool, int, int]:
+    quota = _normalize_quota(principal.get("quota") or default_quota)
+    window_seconds = quota["window_seconds"]
+    max_requests = quota["max_requests"]
+    state_key = f"{principal.get('user', 'unknown')}::{principal.get('key_id', 'unknown')}"
+    now = time.time()
+
+    with API_RATE_LIMIT_LOCK:
+        bucket = API_RATE_LIMIT_STATE[state_key]
+        while bucket and (now - bucket[0]) >= window_seconds:
+            bucket.popleft()
+
+        if len(bucket) >= max_requests:
+            retry_after = max(1, int(window_seconds - (now - bucket[0])) + 1)
+            return False, retry_after, 0
+
+        bucket.append(now)
+        remaining = max(0, max_requests - len(bucket))
+        return True, 0, remaining
+
+
 @app.middleware("http")
 async def api_key_middleware(request: Request, call_next):
     """
-    Active une protection API key sur les endpoints /api/* si demandé par l'environnement.
-    Par défaut désactivé pour conserver la compatibilité dev.
+    Contrôle d'accès API:
+    - API key legacy (optionnelle)
+    - RBAC (rôle + permissions par endpoint)
+    - Quotas glissants (rate limit par clé/utilisateur)
     """
     path = request.url.path
-    if not API_KEY_REQUIRED:
-        return await call_next(request)
-
     if path.startswith(API_KEY_EXEMPT_PATH_PREFIXES):
         return await call_next(request)
-
     if not path.startswith("/api/"):
         return await call_next(request)
 
-    provided_key = request.headers.get(API_KEY_HEADER, "")
-    if not API_KEY_VALUE or not hmac.compare_digest(provided_key, API_KEY_VALUE):
-        return JSONResponse(
-            status_code=401,
-            content={
-                "detail": "Unauthorized: invalid or missing API key",
-                "required_header": API_KEY_HEADER,
-            },
-        )
-    return await call_next(request)
+    provided_key = request.headers.get(API_KEY_HEADER, "").strip()
+    access_control = load_api_access_control() if API_RBAC_ENABLED else {}
+    principal = None
+    remaining = None
+    quota_window = None
+    quota_limit = None
+
+    if API_RBAC_ENABLED:
+        if provided_key:
+            principal = resolve_api_principal(provided_key)
+            if not principal:
+                return JSONResponse(
+                    status_code=401,
+                    content={"detail": "Unauthorized: invalid API key", "required_header": API_KEY_HEADER},
+                )
+
+            permissions = _principal_permissions(principal, access_control)
+            if not any(_permission_match(p, request.method, path) for p in permissions):
+                return JSONResponse(
+                    status_code=403,
+                    content={
+                        "detail": "Forbidden: insufficient role permissions",
+                        "role": principal.get("role", "unknown"),
+                        "method": request.method,
+                        "path": path,
+                    },
+                )
+
+            default_quota = access_control.get("default_quota", {})
+            allowed, retry_after, remaining = enforce_rate_limit(principal, default_quota)
+            quota = _normalize_quota(principal.get("quota") or default_quota)
+            quota_window = quota["window_seconds"]
+            quota_limit = quota["max_requests"]
+            if not allowed:
+                return JSONResponse(
+                    status_code=429,
+                    content={
+                        "detail": "Rate limit exceeded",
+                        "retry_after_seconds": retry_after,
+                        "window_seconds": quota_window,
+                        "max_requests": quota_limit,
+                        "key_id": principal.get("key_id"),
+                        "user": principal.get("user"),
+                    },
+                    headers={"Retry-After": str(retry_after)},
+                )
+        elif API_KEY_REQUIRED:
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "Unauthorized: missing API key", "required_header": API_KEY_HEADER},
+            )
+    else:
+        if API_KEY_REQUIRED:
+            if not API_KEY_VALUE or not hmac.compare_digest(provided_key, API_KEY_VALUE):
+                return JSONResponse(
+                    status_code=401,
+                    content={"detail": "Unauthorized: invalid or missing API key", "required_header": API_KEY_HEADER},
+                )
+
+    if principal:
+        request.state.api_principal = {
+            "key_id": principal.get("key_id"),
+            "user": principal.get("user"),
+            "role": principal.get("role"),
+        }
+
+    response = await call_next(request)
+
+    if principal and remaining is not None and quota_window is not None and quota_limit is not None:
+        response.headers["X-RateLimit-Limit"] = str(quota_limit)
+        response.headers["X-RateLimit-Remaining"] = str(remaining)
+        response.headers["X-RateLimit-Window-Seconds"] = str(quota_window)
+        response.headers["X-API-Key-Id"] = str(principal.get("key_id", "unknown"))
+        response.headers["X-API-Role"] = str(principal.get("role", "unknown"))
+
+    return response
 
 
 def hash_document_number(document_number: str) -> str:
@@ -619,6 +870,296 @@ def init_checkout_attempts_table():
     cursor.close()
     conn.close()
     print("✅ Table checkout_attempts initialisée")
+
+def init_micro_batch_metrics_table():
+    """Crée la table des métriques micro-batch MongoDB -> PostgreSQL."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS micro_batch_event_metrics (
+            batch_metric_id BIGSERIAL PRIMARY KEY,
+            batch_started_at TIMESTAMP NOT NULL,
+            batch_ended_at TIMESTAMP NOT NULL,
+            event_type VARCHAR(80) NOT NULL,
+            events_count INT NOT NULL,
+            latency_ms DOUBLE PRECISION NOT NULL,
+            speed_events_per_sec DOUBLE PRECISION NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (batch_started_at, batch_ended_at, event_type)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_micro_batch_metrics_end ON micro_batch_event_metrics(batch_ended_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_micro_batch_metrics_event_type ON micro_batch_event_metrics(event_type);
+    """)
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+    print("✅ Table micro_batch_event_metrics initialisée")
+
+def load_transfer_kpi_history(limit: int = 200) -> List[dict]:
+    """
+    Charge l'historique JSONL des KPI transfert normalisés.
+    Ex: snapshot Data Lake et micro-batch Mongo->Postgres.
+    """
+    if not TRANSFER_KPI_HISTORY_FILE.exists():
+        return []
+
+    rows = []
+    try:
+        with TRANSFER_KPI_HISTORY_FILE.open("r", encoding="utf-8") as f:
+            for raw_line in f:
+                line = raw_line.strip()
+                if not line:
+                    continue
+                try:
+                    row = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                rows.append(row)
+    except Exception as e:
+        print(f"Erreur lecture historique KPI transfert: {e}")
+        return []
+
+    if limit <= 0:
+        return rows
+    return rows[-limit:]
+
+def normalize_transfer_metric(row: dict) -> dict:
+    """
+    Uniformise les KPI transfert en triplet:
+    - latency_value + latency_unit
+    - capacity_value + capacity_unit
+    - speed_value + speed_unit
+    """
+    metric = str(row.get("metric", "unknown"))
+    timestamp_utc = row.get("timestamp_utc")
+
+    latency_value = None
+    latency_unit = None
+    if row.get("latency_ms") is not None:
+        latency_value = float(row.get("latency_ms"))
+        latency_unit = "ms"
+    elif row.get("latency_seconds") is not None:
+        latency_value = float(row.get("latency_seconds"))
+        latency_unit = "s"
+
+    capacity_value = None
+    capacity_unit = None
+    if row.get("capacity_bytes") is not None:
+        capacity_value = float(row.get("capacity_bytes"))
+        capacity_unit = "bytes"
+    elif row.get("capacity_events") is not None:
+        capacity_value = float(row.get("capacity_events"))
+        capacity_unit = "events"
+    elif row.get("capacity_files") is not None:
+        capacity_value = float(row.get("capacity_files"))
+        capacity_unit = "files"
+
+    speed_value = None
+    speed_unit = None
+    if row.get("speed_bytes_per_second") is not None:
+        speed_value = float(row.get("speed_bytes_per_second"))
+        speed_unit = "bytes/s"
+    elif row.get("speed_events_per_second") is not None:
+        speed_value = float(row.get("speed_events_per_second"))
+        speed_unit = "events/s"
+    elif row.get("speed_files_per_second") is not None:
+        speed_value = float(row.get("speed_files_per_second"))
+        speed_unit = "files/s"
+
+    return {
+        "metric": metric,
+        "timestamp_utc": timestamp_utc,
+        "latency_value": latency_value,
+        "latency_unit": latency_unit,
+        "capacity_value": capacity_value,
+        "capacity_unit": capacity_unit,
+        "speed_value": speed_value,
+        "speed_unit": speed_unit,
+        "raw": row,
+    }
+
+
+def _safe_float(value, digits: int = 2) -> Optional[float]:
+    if value is None:
+        return None
+    try:
+        return round(float(value), digits)
+    except Exception:
+        return None
+
+
+def _format_bytes_human(bytes_value: Optional[float]) -> Optional[str]:
+    if bytes_value is None:
+        return None
+    try:
+        value = float(bytes_value)
+    except Exception:
+        return None
+
+    units = ["B", "KB", "MB", "GB", "TB"]
+    unit_idx = 0
+    while value >= 1024 and unit_idx < len(units) - 1:
+        value /= 1024.0
+        unit_idx += 1
+    return f"{value:.2f} {units[unit_idx]}"
+
+
+def _fraud_rate_label(fraud_rate_percent: float) -> str:
+    if fraud_rate_percent < 2.0:
+        return "faible"
+    if fraud_rate_percent < 5.0:
+        return "modere"
+    return "eleve"
+
+
+def _coverage_label(coverage_percent: float) -> str:
+    if coverage_percent < 20.0:
+        return "faible"
+    if coverage_percent < 50.0:
+        return "moyenne"
+    return "large"
+
+
+def build_readable_fraud_kpis(stats: dict) -> dict:
+    total_alerts = int(stats.get("total_alerts", 0) or 0)
+    total_payments = int(stats.get("total_payments", 0) or 0)
+    fraudulent_payments = int(stats.get("fraudulent_payments", 0) or 0)
+    fraud_rate = float(stats.get("fraud_rate", 0.0) or 0.0)
+    alerted_customers = int(stats.get("alerted_customers", 0) or 0)
+    total_customers = int(stats.get("total_customers", 0) or 0)
+    customer_alert_coverage = float(stats.get("customer_alert_coverage", 0.0) or 0.0)
+
+    alert_to_payment_ratio = round((total_alerts / total_payments), 2) if total_payments > 0 else None
+    alert_per_fraud_payment = round((total_alerts / fraudulent_payments), 2) if fraudulent_payments > 0 else None
+
+    top_reasons = stats.get("top_fraud_reasons") or []
+    top_reason = top_reasons[0] if top_reasons else None
+    top_reason_text = (
+        f"{top_reason.get('reason')} ({top_reason.get('count')})"
+        if isinstance(top_reason, dict) and top_reason.get("reason")
+        else "non disponible"
+    )
+
+    return {
+        "headline": f"{fraud_rate:.2f}% de paiements frauduleux ({fraudulent_payments}/{total_payments})",
+        "risk_level": _fraud_rate_label(fraud_rate),
+        "coverage_level": _coverage_label(customer_alert_coverage),
+        "kpis": {
+            "total_alerts": total_alerts,
+            "fraud_rate_percent": round(fraud_rate, 2),
+            "fraudulent_payments": fraudulent_payments,
+            "total_payments": total_payments,
+            "alerted_customers": alerted_customers,
+            "total_customers": total_customers,
+            "customer_alert_coverage_percent": round(customer_alert_coverage, 2),
+            "alert_to_payment_ratio": alert_to_payment_ratio,
+            "alert_per_fraud_payment": alert_per_fraud_payment,
+            "top_reason": top_reason_text,
+        },
+        "formulas": {
+            "fraud_rate_percent": "fraudulent_payments / total_payments * 100",
+            "customer_alert_coverage_percent": "alerted_customers / total_customers * 100",
+            "alert_to_payment_ratio": "total_alerts / total_payments",
+        },
+        "interpretation": [
+            "Le taux de fraude est mesure sur les paiements, il ne peut donc pas depasser 100%.",
+            "Le volume d'alertes peut etre superieur aux paiements frauduleux, car plusieurs regles peuvent se declencher sur un meme paiement.",
+            f"Raison la plus frequente: {top_reason_text}.",
+        ],
+    }
+
+
+def build_readable_transfer_kpis(transfer_data: dict, micro_batch_data: dict) -> dict:
+    metrics_count = transfer_data.get("metrics_count") or {}
+    points = int(transfer_data.get("points", 0) or 0)
+    summary = transfer_data.get("summary") or {}
+    normalized_rows = transfer_data.get("kpis") or []
+
+    latest_snapshot = None
+    latest_micro_batch_metric = None
+    for row in reversed(normalized_rows):
+        metric_name = row.get("metric")
+        if metric_name == "data_lake_snapshot" and latest_snapshot is None:
+            latest_snapshot = row
+        if metric_name == "micro_batch_events" and latest_micro_batch_metric is None:
+            latest_micro_batch_metric = row
+        if latest_snapshot and latest_micro_batch_metric:
+            break
+
+    latest_snapshot_raw = latest_snapshot.get("raw", {}) if latest_snapshot else {}
+    latest_micro_raw = latest_micro_batch_metric.get("raw", {}) if latest_micro_batch_metric else {}
+
+    snapshot_files = latest_snapshot_raw.get("capacity_files")
+    snapshot_bytes = latest_snapshot_raw.get("capacity_bytes")
+    snapshot_latency_seconds = _safe_float(latest_snapshot_raw.get("latency_seconds"))
+    snapshot_speed_bytes = _safe_float(latest_snapshot_raw.get("speed_bytes_per_second"))
+
+    micro_summary = (micro_batch_data or {}).get("summary") or {}
+    micro_total_events = int(micro_summary.get("total_events", 0) or 0)
+    micro_avg_latency_ms = _safe_float(micro_summary.get("avg_latency_ms"))
+    micro_avg_speed_events = _safe_float(micro_summary.get("avg_speed_events_per_sec"))
+
+    micro_status = "actif" if micro_total_events > 0 else "inactif"
+    availability = "ok" if points > 0 else "aucune_donnee"
+
+    interpretation = []
+    if points == 0:
+        interpretation.append("Aucun KPI de transfert n'est encore disponible.")
+    else:
+        interpretation.append(
+            f"Historique transfert disponible: {points} points ({', '.join(f'{k}:{v}' for k, v in metrics_count.items())})."
+        )
+
+    if latest_snapshot:
+        interpretation.append(
+            "Dernier snapshot Data Lake: "
+            f"{snapshot_files if snapshot_files is not None else '-'} fichiers, "
+            f"{_format_bytes_human(snapshot_bytes) or '-'} transfere(s) en "
+            f"{snapshot_latency_seconds if snapshot_latency_seconds is not None else '-'} s."
+        )
+
+    if micro_total_events == 0:
+        interpretation.append(
+            "Flux micro-batch: 0 evenement sur la fenetre observee. "
+            "Le pipeline est probablement au repos ou sans nouvelle alimentation."
+        )
+    else:
+        interpretation.append(
+            f"Flux micro-batch actif: {micro_total_events} evenement(s) sur la fenetre, "
+            f"latence moyenne {micro_avg_latency_ms if micro_avg_latency_ms is not None else '-'} ms."
+        )
+
+    return {
+        "headline": (
+            f"Transfert {availability}; micro-batch {micro_status}"
+            if points > 0
+            else "Transfert sans donnees recentes"
+        ),
+        "availability": availability,
+        "micro_batch_status": micro_status,
+        "kpis": {
+            "points": points,
+            "metrics_count": metrics_count,
+            "avg_latency_normalized": _safe_float(summary.get("avg_latency")),
+            "avg_capacity_normalized": _safe_float(summary.get("avg_capacity")),
+            "avg_speed_normalized": _safe_float(summary.get("avg_speed")),
+            "latest_snapshot_files": snapshot_files,
+            "latest_snapshot_size_bytes": _safe_float(snapshot_bytes, 0),
+            "latest_snapshot_size_human": _format_bytes_human(snapshot_bytes),
+            "latest_snapshot_latency_seconds": snapshot_latency_seconds,
+            "latest_snapshot_speed_bytes_per_second": snapshot_speed_bytes,
+            "latest_micro_batch_events": int(latest_micro_raw.get("capacity_events", 0) or 0)
+            if latest_micro_raw
+            else 0,
+            "micro_batch_total_events_window": micro_total_events,
+            "micro_batch_avg_latency_ms_window": micro_avg_latency_ms,
+            "micro_batch_avg_speed_events_per_sec_window": micro_avg_speed_events,
+        },
+        "interpretation": interpretation,
+    }
 
 def log_checkout_attempt(
     customer_id: str,
@@ -973,6 +1514,7 @@ async def startup_event():
     init_fraud_alerts_table()
     init_identity_verifications_table()
     init_checkout_attempts_table()
+    init_micro_batch_metrics_table()
     print("✅ Initialisation API terminée")
 
 @app.get("/")
@@ -999,6 +1541,9 @@ async def root():
             "runtime_logs": "/api/runtime/logs",
             "runtime_security": "/api/runtime/security",
             "id_model_status": "/api/id-model/status",
+            "micro_batch_stats": "/api/micro-batch/stats",
+            "transfer_kpis": "/api/transfer/kpis",
+            "kpis_readable": "/api/kpis/readable",
             "stats": "/api/stats",
             "sync": "/api/sync"
         }
@@ -1007,11 +1552,23 @@ async def root():
 
 @app.get("/api/runtime/security")
 async def get_runtime_security():
+    access_control = load_api_access_control() if API_RBAC_ENABLED else {}
+    keys = access_control.get("keys", [])
+    role_permissions = access_control.get("role_permissions", {})
     return {
         "api_key_required": API_KEY_REQUIRED,
         "api_key_header": API_KEY_HEADER,
+        "rbac_enabled": API_RBAC_ENABLED,
         "cors_allow_origins": CORS_ALLOW_ORIGINS,
         "cors_allow_credentials": CORS_ALLOW_CREDENTIALS,
+        "configured_keys": len(keys),
+        "roles": sorted(role_permissions.keys()),
+        "default_quota": access_control.get("default_quota", _normalize_quota({})) if API_RBAC_ENABLED else None,
+        "active_rate_limit_buckets": len(API_RATE_LIMIT_STATE),
+        "access_control_file": str(API_ACCESS_CONTROL_FILE),
+        "access_control_file_exists": API_ACCESS_CONTROL_FILE.exists(),
+        "transfer_kpi_history_file": str(TRANSFER_KPI_HISTORY_FILE),
+        "transfer_kpi_history_exists": TRANSFER_KPI_HISTORY_FILE.exists(),
     }
 
 
@@ -1027,6 +1584,152 @@ async def get_id_model_status():
         "model_type": model.get("model_type") if model else None,
         "version": model.get("version") if model else None,
         "trained_at": model.get("trained_at") if model else None,
+    }
+
+@app.get("/api/micro-batch/stats")
+async def get_micro_batch_stats(
+    window_hours: int = Query(24, ge=1, le=720, description="Fenêtre d'observation en heures"),
+    limit: int = Query(200, ge=1, le=2000),
+):
+    """
+    KPI du flux micro-batch MongoDB -> PostgreSQL.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT
+            batch_started_at,
+            batch_ended_at,
+            event_type,
+            events_count,
+            latency_ms,
+            speed_events_per_sec,
+            created_at
+        FROM micro_batch_event_metrics
+        WHERE batch_ended_at >= NOW() - (%s || ' hours')::INTERVAL
+        ORDER BY batch_ended_at DESC, event_type ASC
+        LIMIT %s
+    """, (window_hours, limit))
+    rows = cursor.fetchall()
+
+    cursor.execute("""
+        SELECT
+            COUNT(*)::INT AS row_count,
+            COALESCE(SUM(events_count), 0)::INT AS total_events,
+            COALESCE(AVG(latency_ms), 0)::FLOAT AS avg_latency_ms,
+            COALESCE(AVG(speed_events_per_sec), 0)::FLOAT AS avg_speed_events_per_sec,
+            MAX(batch_ended_at) AS latest_batch_ended_at
+        FROM micro_batch_event_metrics
+        WHERE batch_ended_at >= NOW() - (%s || ' hours')::INTERVAL
+    """, (window_hours,))
+    summary = cursor.fetchone()
+
+    cursor.execute("""
+        SELECT
+            event_type,
+            COALESCE(SUM(events_count), 0)::INT AS total_events,
+            COUNT(*)::INT AS batches
+        FROM micro_batch_event_metrics
+        WHERE batch_ended_at >= NOW() - (%s || ' hours')::INTERVAL
+        GROUP BY event_type
+        ORDER BY total_events DESC, event_type ASC
+    """, (window_hours,))
+    by_type = cursor.fetchall()
+
+    cursor.close()
+    conn.close()
+
+    return {
+        "window_hours": window_hours,
+        "summary": {
+            "rows": int(summary[0] or 0),
+            "total_events": int(summary[1] or 0),
+            "avg_latency_ms": round(float(summary[2] or 0.0), 2),
+            "avg_speed_events_per_sec": round(float(summary[3] or 0.0), 2),
+            "latest_batch_ended_at": summary[4].isoformat() if summary[4] else None,
+        },
+        "by_event_type": [
+            {"event_type": item[0], "total_events": int(item[1]), "batches": int(item[2])}
+            for item in by_type
+        ],
+        "recent_batches": [
+            {
+                "batch_started_at": row[0].isoformat() if row[0] else None,
+                "batch_ended_at": row[1].isoformat() if row[1] else None,
+                "event_type": row[2],
+                "events_count": int(row[3] or 0),
+                "latency_ms": round(float(row[4] or 0.0), 2),
+                "speed_events_per_sec": round(float(row[5] or 0.0), 2),
+                "created_at": row[6].isoformat() if row[6] else None,
+            }
+            for row in rows
+        ],
+    }
+
+@app.get("/api/transfer/kpis")
+async def get_transfer_kpis(
+    limit: int = Query(200, ge=1, le=5000)
+):
+    """
+    KPI standardisés de transfert (latence/capacité/vitesse).
+    Source: historique JSONL alimenté par snapshots et micro-batch.
+    """
+    history = load_transfer_kpi_history(limit=limit)
+    normalized = [normalize_transfer_metric(row) for row in history]
+
+    latencies = [row["latency_value"] for row in normalized if row["latency_value"] is not None]
+    capacities = [row["capacity_value"] for row in normalized if row["capacity_value"] is not None]
+    speeds = [row["speed_value"] for row in normalized if row["speed_value"] is not None]
+    metrics_count = Counter(row["metric"] for row in normalized)
+
+    return {
+        "history_file": str(TRANSFER_KPI_HISTORY_FILE),
+        "history_exists": TRANSFER_KPI_HISTORY_FILE.exists(),
+        "points": len(normalized),
+        "metrics_count": dict(metrics_count),
+        "summary": {
+            "avg_latency": round(sum(latencies) / len(latencies), 2) if latencies else None,
+            "avg_capacity": round(sum(capacities) / len(capacities), 2) if capacities else None,
+            "avg_speed": round(sum(speeds) / len(speeds), 2) if speeds else None,
+            "max_latency": round(max(latencies), 2) if latencies else None,
+            "max_capacity": round(max(capacities), 2) if capacities else None,
+            "max_speed": round(max(speeds), 2) if speeds else None,
+        },
+        "kpis": normalized,
+    }
+
+
+@app.get("/api/kpis/readable")
+async def get_readable_kpis(
+    limit: int = Query(200, ge=1, le=5000),
+    micro_batch_window_hours: int = Query(24, ge=1, le=720),
+):
+    """
+    Vue lisible des KPI pour soutenance et exploitation:
+    - indicateurs bruts
+    - formules de calcul
+    - interpretation en langage simple
+    """
+    fraud_stats_model = await get_stats()
+    transfer_data = await get_transfer_kpis(limit=limit)
+    micro_batch_data = await get_micro_batch_stats(window_hours=micro_batch_window_hours, limit=min(limit, 500))
+
+    if hasattr(fraud_stats_model, "model_dump"):
+        fraud_stats = fraud_stats_model.model_dump()
+    elif hasattr(fraud_stats_model, "dict"):
+        fraud_stats = fraud_stats_model.dict()
+    else:
+        fraud_stats = dict(fraud_stats_model)
+
+    return {
+        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "window": {
+            "transfer_points_limit": limit,
+            "micro_batch_window_hours": micro_batch_window_hours,
+        },
+        "fraud": build_readable_fraud_kpis(fraud_stats),
+        "transfer": build_readable_transfer_kpis(transfer_data, micro_batch_data),
     }
 
 @app.get("/api/alerts", response_model=List[FraudAlert])
@@ -1392,6 +2095,7 @@ async def get_identity_stats():
 @app.get("/api/products", response_model=List[ProductCatalogItem])
 async def get_products(
     adult_only: bool = Query(False, description="Retourne uniquement les produits catégorie Adult"),
+    only_in_stock: bool = Query(False, description="Retourne uniquement les produits avec stock > 0"),
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0)
 ):
@@ -1408,6 +2112,8 @@ async def get_products(
 
     if adult_only:
         query += " AND LOWER(category) = 'adult'"
+    if only_in_stock:
+        query += " AND stock_quantity > 0"
 
     query += " ORDER BY product_id LIMIT %s OFFSET %s"
     params.extend([limit, offset])

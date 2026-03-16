@@ -12,6 +12,14 @@ curl -s http://localhost:8000/api/stats | jq '{total_alerts,fraud_rate,fraudulen
 
 Critère: `status=healthy` et KPI fraude cohérents (fraud_rate <= 100).
 
+Si sécurité API activée (`API_KEY_REQUIRED=true`), ajouter:
+
+```bash
+export API_HEADER="X-API-Key"
+export API_KEY="demo-admin-key"
+curl -s -H "$API_HEADER: $API_KEY" http://localhost:8000/api/stats | jq .
+```
+
 ## 2. Déroulé oral recommandé
 
 ### Etape A - Lancement orchestré (45s)
@@ -33,16 +41,24 @@ Point à dire:
 - `fraud_rate` = `fraudulent_payments / total_payments`
 - `total_alerts` est un signal règles, pas un volume transactions.
 
+Lecture simplifiée (sans calcul mental):
+
+```bash
+curl -s "http://localhost:8000/api/kpis/readable?limit=200&micro_batch_window_hours=24" | jq '.fraud.headline,.fraud.risk_level,.transfer.headline,.transfer.micro_batch_status,.fraud.interpretation,.transfer.interpretation'
+```
+
 ### Etape C - Dashboard analyst (2-3 min)
 
 Ouvrir:
 - `http://localhost:7600/fraud_dashboard.html`
+- `http://localhost:7600/transfer_kpi_dashboard.html`
 
 A montrer:
 - KPI globaux
 - filtres statut/severite
 - détail d'une alerte (raisons, risk score, device, pays)
 - action analyste (`APPROVE`, `BLOCK`, `INVESTIGATE`).
+- KPI transfert standardisés: latence/capacité/vitesse (dashboard transfert).
 
 ### Etape D - Observabilité (1-2 min)
 

@@ -59,6 +59,42 @@ chmod +x patator
 
 Ces définitions évitent un taux > 100% et rendent les chiffres dashboard cohérents.
 
+### ✅ Conformité parfaite (RBAC, Data Lake sécurité, micro-batch, résilience, KPI transfert)
+
+```bash
+# 1) RBAC + quotas API
+./.venv/bin/python scripts/test_api_rbac_rate_limit.py
+
+# 2) Sécurité Data Lake (TLS + rotation secrets)
+bash scripts/generate_minio_tls_certs.sh
+bash scripts/rotate_minio_credentials.sh all
+
+# 3) Flux micro-batch MongoDB -> PostgreSQL
+./.venv/bin/python scripts/micro_batch_events_to_postgres.py --run-once --window-seconds 30
+
+# 4) Tests de charge DB + résilience
+./.venv/bin/python scripts/test_db_load.py --pg-requests 120 --mongo-requests 120 --concurrency 12
+./.venv/bin/python scripts/test_resilience_failover.py --service postgres --dry-run
+
+# 5) Validation globale
+./.venv/bin/python scripts/validate_perfect_compliance.py
+```
+
+Preuves:
+- `logs/api_rbac_rate_limit_report.json`
+- `logs/db_load_test_report.json`
+- `logs/resilience_failover_report.json`
+- `logs/perfect_compliance_report.json`
+- `logs/transfer_kpi_history.jsonl`
+
+Nouveaux endpoints:
+- `GET /api/micro-batch/stats`
+- `GET /api/transfer/kpis`
+- `GET /api/kpis/readable` (lecture humaine des KPI + interprétation)
+
+Nouveau dashboard:
+- `http://localhost:7600/transfer_kpi_dashboard.html`
+
 ---
 
 ### 🛠️ Méthode manuelle (pour développeurs)
@@ -146,7 +182,7 @@ MinIO (Data Lake)  ─┘                              │
 
 | Service | URL | Identifiants |
 |---------|-----|--------------|
-| MinIO Console | http://localhost:9001 | minio / minio123 |
+| MinIO Console | http://localhost:9001 | `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` (dans `.env`) |
 | Kafka UI | http://localhost:8082 | - |
 | Grafana | http://localhost:3000 | admin / admin |
 | Prometheus | http://localhost:9090 | - |

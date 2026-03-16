@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-03-16T08:53:17.358729+00:00",
+  "generated_at": "2026-03-16T11:15:51.631042+00:00",
   "api_url": "http://localhost:8000",
   "summary": {
     "requirements_total": 11,
@@ -15,7 +15,7 @@
       "status": "PASS",
       "details": {
         "customers": 2500,
-        "orders": 3464,
+        "orders": 3912,
         "orphan_orders": 0
       }
     },
@@ -34,8 +34,8 @@
       "status": "PASS",
       "details": {
         "exit_code": 0,
-        "manifest_file": "/Users/jeanmacario/Documents/GitHub/ProjetDataM1JeanPierre/logs/data_lake_snapshot_20260316T085300Z.json",
-        "stderr_tail": "ing back to the standard locale (\"C\").\nperl: warning: Setting locale failed.\nperl: warning: Please check that your locale settings:\n\tLC_ALL = \"C.UTF-8\",\n\tLC_CTYPE = \"C.UTF-8\",\n\tLANG = \"C.UTF-8\"\n    are supported and installed on your system.\nperl: warning: Falling back to the standard locale (\"C\").\n"
+        "manifest_file": "/Users/jeanmacario/Documents/GitHub/ProjetDataM1JeanPierre/logs/data_lake_snapshot_20260316T111534Z.json",
+        "stderr_tail": ""
       }
     },
     {
@@ -65,9 +65,9 @@
       "status": "PASS",
       "details": {
         "attempts": 15,
-        "avg_ms": 23.55,
-        "p95_ms": 24.1,
-        "max_ms": 66.72
+        "avg_ms": 26.57,
+        "p95_ms": 34.44,
+        "max_ms": 61.19
       }
     },
     {
@@ -79,7 +79,7 @@
         "http_errors": 0,
         "network_errors": 0,
         "minor_adult_accepted": 0,
-        "p95_ms": 171.6,
+        "p95_ms": 181.4,
         "stderr_tail": ""
       }
     },
@@ -121,6 +121,10 @@
         "model_accuracy_percent": 100.0,
         "minor_checkout_status": 403,
         "adult_checkout_status": 200,
+        "selected_adult_product_id": 43,
+        "selected_adult_product_name": "Product 0043",
+        "selected_adult_product_stock": 38,
+        "adult_products_available": 18,
         "model_stderr_tail": ""
       }
     }

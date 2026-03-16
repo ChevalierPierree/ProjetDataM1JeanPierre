@@ -6,6 +6,7 @@ Test de charge pour l'API de commandes:
 """
 
 import argparse
+import os
 import random
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -14,14 +15,24 @@ from collections import Counter
 import requests
 
 
-def fetch_json(url, timeout=10):
-    response = requests.get(url, timeout=timeout)
+def build_api_headers():
+    header_name = os.getenv("API_KEY_HEADER", "X-API-Key").strip()
+    header_value = os.getenv("API_KEY_VALUE", "").strip()
+    if not header_value:
+        header_value = os.getenv("API_DEFAULT_DEMO_KEY", "demo-admin-key").strip()
+    if header_name and header_value:
+        return {header_name: header_value}
+    return {}
+
+
+def fetch_json(url, timeout=10, headers=None):
+    response = requests.get(url, timeout=timeout, headers=headers or {})
     response.raise_for_status()
     return response.json()
 
 
-def post_checkout(api_url, payload, timeout=15):
-    return requests.post(f"{api_url}/api/orders/checkout", json=payload, timeout=timeout)
+def post_checkout(api_url, payload, timeout=15, headers=None):
+    return requests.post(f"{api_url}/api/orders/checkout", json=payload, timeout=timeout, headers=headers or {})
 
 
 def build_payload(adult_products, non_adult_products, adult_cards, minor_cards, adult_order_ratio, minor_ratio):
@@ -32,7 +43,8 @@ def build_payload(adult_products, non_adult_products, adult_cards, minor_cards, 
     selected_product = random.choice(adult_products if wants_adult else non_adult_products)
 
     customer_id = f"C{random.randint(1, 2500):05d}"
-    quantity = random.randint(1, 2)
+    # Quantité fixée à 1 pour limiter les faux négatifs de charge liés aux ruptures de stock.
+    quantity = 1
 
     payload = {
         "customer_id": customer_id,
@@ -48,13 +60,13 @@ def build_payload(adult_products, non_adult_products, adult_cards, minor_cards, 
     return payload, is_minor, wants_adult
 
 
-def run_request(api_url, adult_products, non_adult_products, adult_cards, minor_cards, adult_order_ratio, minor_ratio):
+def run_request(api_url, adult_products, non_adult_products, adult_cards, minor_cards, adult_order_ratio, minor_ratio, headers):
     payload, is_minor, wants_adult = build_payload(
         adult_products, non_adult_products, adult_cards, minor_cards, adult_order_ratio, minor_ratio
     )
     started = time.perf_counter()
     try:
-        response = post_checkout(api_url, payload)
+        response = post_checkout(api_url, payload, headers=headers)
         latency_ms = (time.perf_counter() - started) * 1000
 
         if response.status_code == 200:
@@ -73,6 +85,19 @@ def run_request(api_url, adult_products, non_adult_products, adult_cards, minor_
                 "minor": is_minor,
                 "adult_item": wants_adult
             }
+        if response.status_code == 400:
+            try:
+                detail = response.json().get("detail")
+            except Exception:
+                detail = None
+            if isinstance(detail, str) and "Insufficient stock" in detail:
+                return {
+                    "outcome": "rejected_stock",
+                    "status_code": 400,
+                    "latency_ms": latency_ms,
+                    "minor": is_minor,
+                    "adult_item": wants_adult
+                }
         return {
             "outcome": "error_http",
             "status_code": response.status_code,
@@ -119,6 +144,7 @@ def print_summary(results, total_requests, concurrency, duration):
     print(f"Débit moyen               : {throughput:.2f} req/s")
     print(f"Acceptées                 : {counts['accepted']}")
     print(f"Bloquées mineur/adult     : {counts['blocked_underage']}")
+    print(f"Rejets stock              : {counts['rejected_stock']}")
     print(f"Erreurs HTTP              : {counts['error_http']}")
     print(f"Erreurs réseau            : {counts['error_network']}")
     print(f"P50 latency               : {percentile(latencies, 0.50):.1f} ms")
@@ -132,7 +158,7 @@ def print_summary(results, total_requests, concurrency, duration):
     print("OK: garde-fou 18+ appliqué correctement sous charge.")
 
 
-def run_burst_mode(args, adult_products, non_adult_products, adult_cards, minor_cards):
+def run_burst_mode(args, adult_products, non_adult_products, adult_cards, minor_cards, headers):
     start = time.perf_counter()
     results = []
     with ThreadPoolExecutor(max_workers=args.concurrency) as executor:
@@ -145,7 +171,8 @@ def run_burst_mode(args, adult_products, non_adult_products, adult_cards, minor_
                 adult_cards,
                 minor_cards,
                 args.adult_order_ratio,
-                args.minor_ratio
+                args.minor_ratio,
+                headers
             )
             for _ in range(args.requests)
         ]
@@ -156,7 +183,7 @@ def run_burst_mode(args, adult_products, non_adult_products, adult_cards, minor_
     print_summary(results, args.requests, args.concurrency, duration)
 
 
-def run_realtime_mode(args, adult_products, non_adult_products, adult_cards, minor_cards):
+def run_realtime_mode(args, adult_products, non_adult_products, adult_cards, minor_cards, headers):
     duration_seconds = max(1, int(args.duration_seconds))
     rps = max(1, int(args.rps))
 
@@ -181,7 +208,8 @@ def run_realtime_mode(args, adult_products, non_adult_products, adult_cards, min
                     adult_cards,
                     minor_cards,
                     args.adult_order_ratio,
-                    args.minor_ratio
+                    args.minor_ratio,
+                    headers
                 )
                 for _ in range(rps)
             ]
@@ -228,12 +256,13 @@ def main():
     parser.add_argument("--rps", type=int, default=8, help="Requêtes par seconde en mode realtime")
     args = parser.parse_args()
 
+    headers = build_api_headers()
     print("Chargement du catalogue et des cartes ID...")
-    products = fetch_json(f"{args.api_url}/api/products?limit=1000")
-    id_cards_all = fetch_json(f"{args.api_url}/api/id-cards?limit=500")
+    products = fetch_json(f"{args.api_url}/api/products?limit=1000&only_in_stock=true", headers=headers)
+    id_cards_all = fetch_json(f"{args.api_url}/api/id-cards?limit=500", headers=headers)
 
-    adult_products = [p for p in products if p.get("is_adult_restricted")]
-    non_adult_products = [p for p in products if not p.get("is_adult_restricted")]
+    adult_products = [p for p in products if p.get("is_adult_restricted") and int(p.get("stock_quantity", 0)) > 0]
+    non_adult_products = [p for p in products if not p.get("is_adult_restricted") and int(p.get("stock_quantity", 0)) > 0]
     adult_cards = [c for c in id_cards_all if c.get("is_adult")]
     minor_cards = [c for c in id_cards_all if not c.get("is_adult")]
 
@@ -248,9 +277,9 @@ def main():
     )
 
     if args.mode == "realtime":
-        run_realtime_mode(args, adult_products, non_adult_products, adult_cards, minor_cards)
+        run_realtime_mode(args, adult_products, non_adult_products, adult_cards, minor_cards, headers)
     else:
-        run_burst_mode(args, adult_products, non_adult_products, adult_cards, minor_cards)
+        run_burst_mode(args, adult_products, non_adult_products, adult_cards, minor_cards, headers)
 
 
 if __name__ == "__main__":

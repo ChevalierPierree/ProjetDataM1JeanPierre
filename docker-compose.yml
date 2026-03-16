@@ -53,17 +53,18 @@ services:
     container_name: kivendtout-minio
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: minio
-      MINIO_ROOT_PASSWORD: minio123
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minio123}
     ports:
       - "9000:9000" # API
       - "9001:9001" # Console web
     volumes:
       - minio_data:/data
+      - ./security/minio/certs:/root/.minio/certs
     networks:
       - kivendtout-network
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
+      test: [ "CMD-SHELL", "curl -kf https://localhost:9000/minio/health/live || curl -f http://localhost:9000/minio/health/live" ]
       interval: 30s
       timeout: 20s
       retries: 3
@@ -74,8 +75,52 @@ services:
     container_name: kivendtout-minio-init
     depends_on:
       - minio
+    environment:
+      MINIO_SCHEME: ${MINIO_SCHEME:-http}
+      MINIO_TLS_INSECURE: ${MINIO_TLS_INSECURE:-false}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minio123}
+      MINIO_BRONZE_WRITER_ACCESS_KEY: ${MINIO_BRONZE_WRITER_ACCESS_KEY:-bronze-writer}
+      MINIO_BRONZE_WRITER_SECRET_KEY: ${MINIO_BRONZE_WRITER_SECRET_KEY:-bronze-writer-change-me}
+      MINIO_SILVER_READER_ACCESS_KEY: ${MINIO_SILVER_READER_ACCESS_KEY:-silver-reader}
+      MINIO_SILVER_READER_SECRET_KEY: ${MINIO_SILVER_READER_SECRET_KEY:-silver-reader-change-me}
+      MINIO_GOLD_READER_ACCESS_KEY: ${MINIO_GOLD_READER_ACCESS_KEY:-gold-reader}
+      MINIO_GOLD_READER_SECRET_KEY: ${MINIO_GOLD_READER_SECRET_KEY:-gold-reader-change-me}
+    volumes:
+      - ./security/minio/policies:/policies:ro
     entrypoint: >
-      /bin/sh -c " sleep 5; /usr/bin/mc config host add myminio http://minio:9000 minio minio123; /usr/bin/mc mb myminio/bronze --ignore-existing; /usr/bin/mc mb myminio/silver --ignore-existing; /usr/bin/mc mb myminio/gold --ignore-existing; /usr/bin/mc mb myminio/models --ignore-existing; exit 0; "
+      /bin/sh -c "
+      set -e;
+      sleep 5;
+      scheme=$${MINIO_SCHEME};
+      insecure='';
+      if [ \"$${MINIO_TLS_INSECURE}\" = 'true' ]; then insecure='--insecure'; fi;
+      endpoint=$${scheme}://minio:9000;
+      if ! /usr/bin/mc $$insecure alias set local $$endpoint $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD}; then
+        if [ \"$$scheme\" = 'https' ]; then
+          endpoint=http://minio:9000;
+          insecure='';
+        else
+          endpoint=https://minio:9000;
+          insecure='--insecure';
+        fi;
+        /usr/bin/mc $$insecure alias set local $$endpoint $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD};
+      fi;
+      /usr/bin/mc $$insecure mb local/bronze --ignore-existing;
+      /usr/bin/mc $$insecure mb local/silver --ignore-existing;
+      /usr/bin/mc $$insecure mb local/gold --ignore-existing;
+      /usr/bin/mc $$insecure mb local/models --ignore-existing;
+      /usr/bin/mc $$insecure admin policy create local bronze-writer /policies/bronze-writer.json || true;
+      /usr/bin/mc $$insecure admin policy create local silver-reader /policies/silver-reader.json || true;
+      /usr/bin/mc $$insecure admin policy create local gold-reader /policies/gold-reader.json || true;
+      /usr/bin/mc $$insecure admin user add local $${MINIO_BRONZE_WRITER_ACCESS_KEY} $${MINIO_BRONZE_WRITER_SECRET_KEY} || true;
+      /usr/bin/mc $$insecure admin user add local $${MINIO_SILVER_READER_ACCESS_KEY} $${MINIO_SILVER_READER_SECRET_KEY} || true;
+      /usr/bin/mc $$insecure admin user add local $${MINIO_GOLD_READER_ACCESS_KEY} $${MINIO_GOLD_READER_SECRET_KEY} || true;
+      /usr/bin/mc $$insecure admin policy attach local bronze-writer --user $${MINIO_BRONZE_WRITER_ACCESS_KEY} || true;
+      /usr/bin/mc $$insecure admin policy attach local silver-reader --user $${MINIO_SILVER_READER_ACCESS_KEY} || true;
+      /usr/bin/mc $$insecure admin policy attach local gold-reader --user $${MINIO_GOLD_READER_ACCESS_KEY} || true;
+      exit 0;
+      "
     networks:
       - kivendtout-network
 

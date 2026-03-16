@@ -21,6 +21,7 @@ logs/*.pid
 .DS_Store
 .idea/
 .vscode/
+~$*.xlsx
 
 # Project docs workspace requested to ignore
 markdowns/

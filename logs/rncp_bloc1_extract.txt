@@ -1,0 +1,31 @@
+RNCP Bloc 1 - Extraction sheet1 rows 17..45
+R17	B=C1.1 Concevoir et développer une base de données relationnelle universellement accessible en réponse aux besoins d’un client/d’une gouvernance	C=Le modèle relationnel répond précisément au besoin exprimé par le client/la gouvernance	D=1	E=2	F=Acquis	G=Avancé	H=
+R18	B=	C=Les technologies et langages de requêtes mobilisés, en collaboration avec l’architecte de données, sont appropriés au projet	D=0	E=	F=	G=	H=
+R19	B=	C=La base respecte les principes de normalisation et garantit l'intégrité des données	D=1	E=	F=	G=	H=
+R20	B=	C=Des tests de charge sont réalisés confirmant l’intégrité et la performance de la base de données.	D=0	E=	F=	G=	H=
+R21	B=C1.2 Concevoir et développer une base de données non-relationnelle universellement accessible permettant la mise à disposition des données semi-structurées et non structurées	C=Le choix des technologies NoSQL est justifié en fonction des types de données et des besoins analytiques.	D=	E=0	F=Non Acquis	G=	H=
+R22	B=	C=La base de données permet une gestion efficace des données semi- structurées et non structurées.	D=	E=	F=	G=	H=
+R23	B=C1.3. Concevoir et construire un lac de données (Data Lake) universellement accessible tenant compte des contraintes et des règlements de sécurité et de protection des données en vigueur	C=L’architecture choisie répond aux exigences d’intégration des données multivariées	D=	E=	F=	G=	H=
+R24	B=	C=Les indicateurs de performance (latence, capacité, vitesse) sont définis et suivis	D=	E=0	F=Non Acquis	G=	H=
+R25	B=	C=Les solutions respectent les contraintes de sécurité et de protection des données en concertation avec la gouvernance des données de l’organisation.	D=	E=	F=	G=	H=
+R26	B=C1.4. Architecturer des infrastructures scalables et résilientes	C=Les systèmes de haute disponibilité choisis garantissent la continuité des opérations et sont concertés avec l’architecte d’infrastructures de l’organisation	D=1	E=2	F=Acquis	G=	H=
+R27	B=	C=L’architecture répond aux besoins de scalabilité pour accompagner la croissance	D=1	E=	F=Non Acquis	G=	H=
+R28	B=	C=Les contraintes de résilience face aux pannes sont prises en compte et testées.	D=	E=	F=Non Acquis	G=	H=
+R29	B=C2.1 Créer une API en utilisant les technologies permettant de rendre accessibles les données et facilitant la communication entre divers services informatiques	C=Les technologies utilisées pour créer l’API sont appropriées	D=	E=	F=	G=	H=
+R30	B=	C=L’architecture déployée rends accessible les données	D=	E=	F=	G=	H=
+R31	B=	C=Le niveau de complexité de l’API est adapté aux données à traiter ;	D=	E=0	F=Non Acquis	G=	H=
+R32	B=	C=Les mécanismes d’authentification sont déployés	D=	E=	F=	G=	H=
+R33	B=	C=Les autorisations et les quotas imposés aux utilisateurs de l’API sont faciles à comprendre et à intégrer.	D=	E=	F=	G=	H=
+R34	B=C2.2 Implémenter un système distribué en utilisant des technologies de streaming	C=Une veille technologique permet d’identifier et mobiliser les solutions de streaming adaptées	D=	E=0	F=Non Acquis	G=	H=
+R35	B=	C=La solution proposée permet de traiter (en micro batch) et d’analyser l’ensemble de données collectées sur une période donnée (en secondes ou millisecondes)	D=	E=	F=	G=	H=
+R36	B=	C=La solution proposée permet de traiter (en temps réel) et d’analyser l’ensemble de données au fur et à mesure de leur disponibilité	D=	E=	F=	G=	H=
+R37	B=	C=L'implémentation est réalisée conformément avec les équipes métiers et techniques	D=	E=	F=	G=	H=
+R38	B=C2.3 Transformer les données provenant de
+différentes sources	C=Les outils d’intégration mobilisés permettent de transformer et formater les données conformément aux besoins métiers.	D=	E=	F=	G=	H=
+R39	B=	C=L’intégration des données provenant de sources variées est réalisée de manière fluide et cohérente.	D=	E=0	F=Non Acquis	G=	H=
+R40	B=	C=Les données transformées sont structurées de manière à faciliter leur exploitation pour des analyses multidimensionnelles et à grande échelle	D=	E=	F=	G=	H=
+R41	B=C2.4 Optimiser la performance des pipelines	C=Les techniques d’intégration et de mise en scène permettent d’atteindre les objectifs de performance.	D=1	E=3	F=Acquis	G=	H=
+R42	B=	C=Les pipelines développés permettent d’intégrer des sources de données provenant de différentes sources	D=1	E=	F=	G=	H=
+R43	B=	C=Les pipelines développés permettent un accès rapide aux données	D=1	E=	F=	G=	H=
+R44	B=	C=Les indicateurs mis en place permettent de mesurer la performance de transfert de données	D=	E=	F=	G=	H=
+R45	B=	C=La qualité des données traitées garantit des analyses exploitables.	D=	E=	F=	G=	H=

@@ -1,0 +1,95 @@
+{
+  "generated_at": "2026-03-16T13:06:28.863786+00:00",
+  "api_url": "http://localhost:8000",
+  "summary": {
+    "total": 6,
+    "passed": 6,
+    "failed": 0,
+    "success_rate_percent": 100.0,
+    "global_status": "PASS"
+  },
+  "checks": [
+    {
+      "item": "rbac_rate_limit",
+      "status": "PASS",
+      "details": {
+        "exit_code": 0,
+        "summary": {
+          "total_checks": 7,
+          "passed": 7,
+          "failed": 0,
+          "success_rate_percent": 100.0
+        },
+        "stderr_tail": ""
+      }
+    },
+    {
+      "item": "data_lake_security",
+      "status": "PASS",
+      "details": {
+        "policies_ok": true,
+        "tls_certs_present": true,
+        "compose_security_ok": true,
+        "policy_files": [
+          "/Users/jeanmacario/Documents/GitHub/ProjetDataM1JeanPierre/security/minio/policies/bronze-writer.json",
+          "/Users/jeanmacario/Documents/GitHub/ProjetDataM1JeanPierre/security/minio/policies/silver-reader.json",
+          "/Users/jeanmacario/Documents/GitHub/ProjetDataM1JeanPierre/security/minio/policies/gold-reader.json"
+        ]
+      }
+    },
+    {
+      "item": "micro_batch_flow",
+      "status": "PASS",
+      "details": {
+        "exit_code": 0,
+        "api_summary": {
+          "rows": 13,
+          "total_events": 0,
+          "avg_latency_ms": 5171554.27,
+          "avg_speed_events_per_sec": 0.0,
+          "latest_batch_ended_at": "2026-03-16T09:43:51.984639"
+        },
+        "stdout_tail": "cario/Documents/GitHub/ProjetDataM1JeanPierre/logs/micro_batch_state.json\ninitial_watermark: 2026-03-16T09:43:21.984639Z\n[batch 0001] window=2026-03-16T09:43:21.984639Z->2026-03-16T09:43:51.984639Z events=0 types=0 latency_ms=12154640.17 speed_events_per_sec=0.00\nMicro-batch termin\u00e9. batches_done=1\n",
+        "stderr_tail": ""
+      }
+    },
+    {
+      "item": "db_load_test",
+      "status": "PASS",
+      "details": {
+        "exit_code": 0,
+        "status": "PASS",
+        "stderr_tail": ""
+      }
+    },
+    {
+      "item": "resilience_failover",
+      "status": "PASS",
+      "details": {
+        "exit_code": 0,
+        "status": "PASS",
+        "dry_run": true,
+        "stderr_tail": ""
+      }
+    },
+    {
+      "item": "transfer_kpi_dashboard_data",
+      "status": "PASS",
+      "details": {
+        "points": 35,
+        "metrics_count": {
+          "data_lake_snapshot": 17,
+          "micro_batch_events": 18
+        },
+        "summary": {
+          "avg_latency": 262258200.92,
+          "avg_capacity": 14865229.23,
+          "avg_speed": 1000317.49,
+          "max_latency": 9107179355.51,
+          "max_capacity": 30602845.0,
+          "max_speed": 2185917.5
+        }
+      }
+    }
+  ]
+}

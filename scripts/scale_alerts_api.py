@@ -6,6 +6,7 @@ Simulation d'alertes de fraude via API:
 """
 
 import argparse
+import os
 import random
 import time
 from collections import Counter
@@ -29,8 +30,18 @@ REASON_POOL = [
 ]
 
 
-def post_alert(api_url, payload, timeout=15):
-    return requests.post(f"{api_url}/api/alerts/simulate", json=payload, timeout=timeout)
+def build_api_headers():
+    header_name = os.getenv("API_KEY_HEADER", "X-API-Key").strip()
+    header_value = os.getenv("API_KEY_VALUE", "").strip()
+    if not header_value:
+        header_value = os.getenv("API_DEFAULT_DEMO_KEY", "demo-admin-key").strip()
+    if header_name and header_value:
+        return {header_name: header_value}
+    return {}
+
+
+def post_alert(api_url, payload, timeout=15, headers=None):
+    return requests.post(f"{api_url}/api/alerts/simulate", json=payload, timeout=timeout, headers=headers or {})
 
 
 def build_payload(high_severity_ratio):
@@ -64,12 +75,12 @@ def build_payload(high_severity_ratio):
     return payload
 
 
-def run_request(api_url, high_severity_ratio):
+def run_request(api_url, high_severity_ratio, headers):
     payload = build_payload(high_severity_ratio)
     started = time.perf_counter()
 
     try:
-        response = post_alert(api_url, payload)
+        response = post_alert(api_url, payload, headers=headers)
         latency_ms = (time.perf_counter() - started) * 1000
 
         if response.status_code == 200:
@@ -131,12 +142,12 @@ def print_summary(results, total_requests, concurrency, duration):
     print("OK: alertes de fraude générées pour dashboard temps réel.")
 
 
-def run_burst_mode(args):
+def run_burst_mode(args, headers):
     start = time.perf_counter()
     results = []
     with ThreadPoolExecutor(max_workers=args.concurrency) as executor:
         futures = [
-            executor.submit(run_request, args.api_url, args.high_severity_ratio)
+            executor.submit(run_request, args.api_url, args.high_severity_ratio, headers)
             for _ in range(args.requests)
         ]
         for fut in as_completed(futures):
@@ -146,7 +157,7 @@ def run_burst_mode(args):
     print_summary(results, args.requests, args.concurrency, duration)
 
 
-def run_realtime_mode(args):
+def run_realtime_mode(args, headers):
     duration_seconds = max(1, int(args.duration_seconds))
     rps = max(1, int(args.rps))
 
@@ -163,7 +174,7 @@ def run_realtime_mode(args):
         for second_idx in range(duration_seconds):
             tick_start = time.perf_counter()
             futures = [
-                executor.submit(run_request, args.api_url, args.high_severity_ratio)
+                executor.submit(run_request, args.api_url, args.high_severity_ratio, headers)
                 for _ in range(rps)
             ]
             tick_results = []
@@ -208,10 +219,11 @@ def main():
     parser.add_argument("--high-severity-ratio", type=float, default=0.35, help="Part d'alertes HIGH [0..1]")
     args = parser.parse_args()
 
+    headers = build_api_headers()
     if args.mode == "realtime":
-        run_realtime_mode(args)
+        run_realtime_mode(args, headers)
     else:
-        run_burst_mode(args)
+        run_burst_mode(args, headers)
 
 
 if __name__ == "__main__":

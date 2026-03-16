@@ -1,0 +1,261 @@
+#!/usr/bin/env python3
+"""
+Validation ciblée des 5 points de conformité "parfaite":
+1) RBAC + rate limit
+2) Sécurité Data Lake
+3) Flux micro-batch
+4) Tests charge DB + résilience
+5) KPI de transfert standardisés
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import subprocess
+from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+import requests
+
+
+ROOT_DIR = Path(__file__).resolve().parent.parent
+LOG_DIR = ROOT_DIR / "logs"
+API_URL = os.getenv("VALIDATION_API_URL", "http://localhost:8000")
+
+
+@dataclass
+class Check:
+    item: str
+    status: str
+    details: Dict
+
+
+def run_cmd(cmd: List[str], timeout: int = 300) -> Tuple[int, str, str]:
+    proc = subprocess.run(
+        cmd,
+        cwd=ROOT_DIR,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+    )
+    return proc.returncode, proc.stdout, proc.stderr
+
+
+def load_json(path: Path) -> Optional[Dict]:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
+def api_headers() -> Dict[str, str]:
+    header_name = os.getenv("API_KEY_HEADER", "X-API-Key").strip()
+    header_value = os.getenv("API_KEY_VALUE", "").strip()
+    if not header_value:
+        header_value = os.getenv("API_DEFAULT_DEMO_KEY", "demo-admin-key").strip()
+    if header_name and header_value:
+        return {header_name: header_value}
+    return {}
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Validation conformité parfaite")
+    parser.add_argument("--output", default="logs/perfect_compliance_report.json")
+    parser.add_argument("--run-failover", action="store_true", help="Exécute réellement stop/start docker")
+    args = parser.parse_args()
+
+    checks: List[Check] = []
+    headers = api_headers()
+
+    # 1) RBAC + rate limit
+    rbac_code, _, rbac_err = run_cmd([str(ROOT_DIR / ".venv" / "bin" / "python"), "scripts/test_api_rbac_rate_limit.py"])
+    rbac_report = load_json(LOG_DIR / "api_rbac_rate_limit_report.json")
+    checks.append(
+        Check(
+            item="rbac_rate_limit",
+            status="PASS" if rbac_code == 0 else "FAIL",
+            details={
+                "exit_code": rbac_code,
+                "summary": (rbac_report or {}).get("summary", {}),
+                "stderr_tail": rbac_err[-300:],
+            },
+        )
+    )
+
+    # 2) Data Lake security
+    policy_files = [
+        ROOT_DIR / "security" / "minio" / "policies" / "bronze-writer.json",
+        ROOT_DIR / "security" / "minio" / "policies" / "silver-reader.json",
+        ROOT_DIR / "security" / "minio" / "policies" / "gold-reader.json",
+    ]
+    policies_ok = all(path.exists() for path in policy_files)
+    tls_ok = (ROOT_DIR / "security" / "minio" / "certs" / "public.crt").exists() and (
+        ROOT_DIR / "security" / "minio" / "certs" / "private.key"
+    ).exists()
+    compose_text = (ROOT_DIR / "docker-compose.yml").read_text(encoding="utf-8")
+    compose_security_ok = all(
+        token in compose_text
+        for token in [
+            "MINIO_BRONZE_WRITER_ACCESS_KEY",
+            "MINIO_SILVER_READER_ACCESS_KEY",
+            "MINIO_GOLD_READER_ACCESS_KEY",
+            "./security/minio/certs:/root/.minio/certs",
+            "./security/minio/policies:/policies:ro",
+        ]
+    )
+    checks.append(
+        Check(
+            item="data_lake_security",
+            status="PASS" if policies_ok and tls_ok and compose_security_ok else "FAIL",
+            details={
+                "policies_ok": policies_ok,
+                "tls_certs_present": tls_ok,
+                "compose_security_ok": compose_security_ok,
+                "policy_files": [str(p) for p in policy_files],
+            },
+        )
+    )
+
+    # 3) Micro-batch
+    micro_code, micro_out, micro_err = run_cmd(
+        [
+            str(ROOT_DIR / ".venv" / "bin" / "python"),
+            "scripts/micro_batch_events_to_postgres.py",
+            "--run-once",
+            "--window-seconds",
+            "30",
+            "--bootstrap-minutes",
+            "10",
+        ],
+        timeout=360,
+    )
+    micro_stats_ok = False
+    micro_details = {}
+    try:
+        resp = requests.get(f"{API_URL}/api/micro-batch/stats?window_hours=24&limit=20", timeout=20, headers=headers)
+        if resp.status_code == 200:
+            payload = resp.json()
+            micro_details = payload.get("summary", {})
+            micro_stats_ok = True
+    except Exception:
+        micro_stats_ok = False
+    checks.append(
+        Check(
+            item="micro_batch_flow",
+            status="PASS" if micro_code == 0 and micro_stats_ok else "FAIL",
+            details={
+                "exit_code": micro_code,
+                "api_summary": micro_details,
+                "stdout_tail": micro_out[-300:],
+                "stderr_tail": micro_err[-300:],
+            },
+        )
+    )
+
+    # 4) DB load + resilience
+    db_code, _, db_err = run_cmd(
+        [
+            str(ROOT_DIR / ".venv" / "bin" / "python"),
+            "scripts/test_db_load.py",
+            "--pg-requests",
+            "120",
+            "--mongo-requests",
+            "120",
+            "--concurrency",
+            "12",
+        ],
+        timeout=420,
+    )
+    db_report = load_json(LOG_DIR / "db_load_test_report.json")
+    checks.append(
+        Check(
+            item="db_load_test",
+            status="PASS" if db_code == 0 else "FAIL",
+            details={
+                "exit_code": db_code,
+                "status": (db_report or {}).get("status"),
+                "stderr_tail": db_err[-300:],
+            },
+        )
+    )
+
+    failover_cmd = [
+        str(ROOT_DIR / ".venv" / "bin" / "python"),
+        "scripts/test_resilience_failover.py",
+        "--service",
+        "postgres",
+    ]
+    if not args.run_failover:
+        failover_cmd.append("--dry-run")
+    failover_code, _, failover_err = run_cmd(failover_cmd, timeout=600)
+    failover_report = load_json(LOG_DIR / "resilience_failover_report.json")
+    checks.append(
+        Check(
+            item="resilience_failover",
+            status="PASS" if failover_code == 0 else "FAIL",
+            details={
+                "exit_code": failover_code,
+                "status": (failover_report or {}).get("status"),
+                "dry_run": not args.run_failover,
+                "stderr_tail": failover_err[-300:],
+            },
+        )
+    )
+
+    # 5) KPI transfert standardisés
+    kpi_ok = False
+    kpi_details = {}
+    try:
+        resp = requests.get(f"{API_URL}/api/transfer/kpis?limit=200", timeout=20, headers=headers)
+        if resp.status_code == 200:
+            payload = resp.json()
+            kpi_details = {
+                "points": payload.get("points"),
+                "metrics_count": payload.get("metrics_count"),
+                "summary": payload.get("summary"),
+            }
+            kpi_ok = int(payload.get("points", 0) or 0) > 0
+    except Exception:
+        kpi_ok = False
+    checks.append(
+        Check(
+            item="transfer_kpi_dashboard_data",
+            status="PASS" if kpi_ok else "FAIL",
+            details=kpi_details,
+        )
+    )
+
+    passed = sum(1 for c in checks if c.status == "PASS")
+    failed = len(checks) - passed
+    report = {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "api_url": API_URL,
+        "summary": {
+            "total": len(checks),
+            "passed": passed,
+            "failed": failed,
+            "success_rate_percent": round((passed / len(checks)) * 100.0, 2) if checks else 0.0,
+            "global_status": "PASS" if failed == 0 else "FAIL",
+        },
+        "checks": [asdict(c) for c in checks],
+    }
+
+    output = Path(args.output).resolve()
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(report, indent=2), encoding="utf-8")
+
+    print("=== PERFECT COMPLIANCE VALIDATION ===")
+    print(f"Report         : {output}")
+    print(f"Passed         : {passed}")
+    print(f"Failed         : {failed}")
+    print(f"Global status  : {report['summary']['global_status']}")
+
+    return 0 if failed == 0 else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

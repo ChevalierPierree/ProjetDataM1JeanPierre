@@ -1,7 +1,0 @@
-::1 - - [25/Feb/2026 09:44:36] "GET /fraud_dashboard.html HTTP/1.1" 200 -
-::1 - - [25/Feb/2026 09:44:42] "GET /fraud_dashboard.html HTTP/1.1" 200 -
-::1 - - [25/Feb/2026 09:44:43] code 404, message File not found
-::1 - - [25/Feb/2026 09:44:43] "GET /favicon.ico HTTP/1.1" 404 -
-::1 - - [25/Feb/2026 09:56:26] "GET /fraud_dashboard.html HTTP/1.1" 200 -
-::1 - - [25/Feb/2026 10:29:02] "GET /fraud_dashboard.html HTTP/1.1" 200 -
-::1 - - [25/Feb/2026 10:37:48] "GET /fraud_dashboard.html HTTP/1.1" 200 -
