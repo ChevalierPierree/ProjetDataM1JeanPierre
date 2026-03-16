@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-03-16T13:06:28.863786+00:00",
+  "generated_at": "2026-03-16T13:26:16.742338+00:00",
   "api_url": "http://localhost:8000",
   "summary": {
     "total": 6,
@@ -29,6 +29,9 @@
       "details": {
         "policies_ok": true,
         "tls_certs_present": true,
+        "tls_generated_during_validation": true,
+        "tls_generate_exit_code": 0,
+        "tls_generate_stderr_tail": "Generating a 4096 bit RSA private key\n.++++\n......................................................................................++++\nwriting new private key to '/Users/jeanmacario/Documents/GitHub/ProjetDataM1JeanPierre/security/minio/certs/private.key'\n-----\n",
         "compose_security_ok": true,
         "policy_files": [
           "/Users/jeanmacario/Documents/GitHub/ProjetDataM1JeanPierre/security/minio/policies/bronze-writer.json",
@@ -43,13 +46,13 @@
       "details": {
         "exit_code": 0,
         "api_summary": {
-          "rows": 13,
+          "rows": 15,
           "total_events": 0,
-          "avg_latency_ms": 5171554.27,
+          "avg_latency_ms": 4558016.07,
           "avg_speed_events_per_sec": 0.0,
-          "latest_batch_ended_at": "2026-03-16T09:43:51.984639"
+          "latest_batch_ended_at": "2026-03-16T13:16:44.092502"
         },
-        "stdout_tail": "cario/Documents/GitHub/ProjetDataM1JeanPierre/logs/micro_batch_state.json\ninitial_watermark: 2026-03-16T09:43:21.984639Z\n[batch 0001] window=2026-03-16T09:43:21.984639Z->2026-03-16T09:43:51.984639Z events=0 types=0 latency_ms=12154640.17 speed_events_per_sec=0.00\nMicro-batch termin\u00e9. batches_done=1\n",
+        "stdout_tail": "macario/Documents/GitHub/ProjetDataM1JeanPierre/logs/micro_batch_state.json\ninitial_watermark: 2026-03-16T13:16:14.092502Z\n[batch 0001] window=2026-03-16T13:16:14.092502Z->2026-03-16T13:16:44.092502Z events=0 types=0 latency_ms=570019.42 speed_events_per_sec=0.00\nMicro-batch termin\u00e9. batches_done=1\n",
         "stderr_tail": ""
       }
     },
@@ -76,15 +79,15 @@
       "item": "transfer_kpi_dashboard_data",
       "status": "PASS",
       "details": {
-        "points": 35,
+        "points": 38,
         "metrics_count": {
-          "data_lake_snapshot": 17,
-          "micro_batch_events": 18
+          "data_lake_snapshot": 18,
+          "micro_batch_events": 20
         },
         "summary": {
-          "avg_latency": 262258200.92,
-          "avg_capacity": 14865229.23,
-          "avg_speed": 1000317.49,
+          "avg_latency": 241583607.49,
+          "avg_capacity": 14496996.53,
+          "avg_speed": 968717.88,
           "max_latency": 9107179355.51,
           "max_capacity": 30602845.0,
           "max_speed": 2185917.5

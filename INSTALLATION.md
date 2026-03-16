@@ -244,7 +244,7 @@ rm -f logs/*.log
 - 📘 **README Principal** : `README.md`
 - 📗 **Guide PATATOR** : `PATATOR_GUIDE.md`
 - 📙 **Quickstart** : `QUICKSTART.md`
-- 📕 **Récapitulatif Complet** : `RECAP_COMPLET_PROJET.md`
+- 📕 **Audit Rendu Projet** : `AUDIT_RENDU_PROJET.md`
 - 📓 **Guide Simplifié** : `INSTALL_SIMPLE.md`
 
 ---

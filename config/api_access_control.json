@@ -16,7 +16,8 @@
       "GET:/api/products*",
       "GET:/api/id-cards*",
       "GET:/api/micro-batch/*",
-      "GET:/api/transfer/*"
+      "GET:/api/transfer/*",
+      "GET:/api/kpis/*"
     ],
     "partner": [
       "GET:/api/products*",

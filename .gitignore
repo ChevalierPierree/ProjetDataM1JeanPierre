@@ -16,12 +16,19 @@ venv/
 # Logs and runtime artifacts
 logs/*.log
 logs/*.pid
+logs/micro_batch_state.json
+logs/runtime_refresh.log
 
 # Editor/OS
 .DS_Store
 .idea/
 .vscode/
 ~$*.xlsx
+
+# Local security artifacts
+security/minio/certs/private.key
+security/minio/certs/public.crt
+security/minio/certs/CAs/
 
 # Project docs workspace requested to ignore
 markdowns/

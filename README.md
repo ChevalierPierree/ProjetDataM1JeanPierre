@@ -129,7 +129,7 @@ open http://localhost:7600/fraud_dashboard.html
 
 ## 📚 Documentation
 
-Toute la documentation se trouve dans le dossier [`markdowns/`](./markdowns/) :
+Documentation de rendu (racine) + annexes techniques (`markdowns/`) :
 
 | Document | Description |
 |----------|-------------|
@@ -137,8 +137,8 @@ Toute la documentation se trouve dans le dossier [`markdowns/`](./markdowns/) :
 | [**🚀 Quick Start**](./QUICKSTART.md) | Démarrage en 3 commandes |
 | [**🛠️ Installation**](./INSTALLATION.md) | Guide d'installation détaillé |
 | [**🎤 Demo Soutenance**](./DEMO_SOUTENANCE.md) | Script de démo 5-7 minutes |
-| [**� Récap Complet**](./RECAP_COMPLET_PROJET.md) | Vue d'ensemble du projet |
-| [**�📖 README Complet**](./markdowns/README.md) | Documentation technique détaillée |
+| [**✅ Checklist Sujet 1**](./SUJET1_SOUTENANCE_CHECKLIST.md) | Exécution et preuves attendues |
+| [**📋 Audit Rendu**](./AUDIT_RENDU_PROJET.md) | État des lieux + périmètre + nettoyage |
 | [**🛠️ Stack Technique**](./markdowns/STACK_TECHNIQUE.md) | Justification des choix technologiques |
 | [**📊 Récap Avancement**](./markdowns/RECAP_AVANCEMENT.md) | État d'avancement du projet |
 | [**✅ Session Finale**](./markdowns/SESSION_FINALE.md) | Résumé de la session de setup |
@@ -206,6 +206,6 @@ Projet académique - EFREI M1 Data Engineering & IA - 2026
 
 ## 🆘 Support
 
-Pour toute question, consultez la [documentation complète](./markdowns/README.md) ou créez une issue.
+Pour toute question, consultez la documentation de cette page et les annexes dans [`markdowns/`](./markdowns/).
 
 **Dernière mise à jour** : 25 février 2026

@@ -402,7 +402,7 @@ main() {
 - 📘 `README.md` - Vue d'ensemble projet
 - 📗 `INSTALLATION.md` - Guide installation détaillé
 - 📙 `QUICKSTART.md` - Démarrage rapide
-- 📕 `RECAP_COMPLET_PROJET.md` - Récapitulatif complet
+- 📕 `AUDIT_RENDU_PROJET.md` - Audit de rendu et périmètre
 - 📓 `FRAUD_DASHBOARD_README.md` - Guide dashboard
 
 ---

@@ -122,7 +122,7 @@ docker compose down
 
 - 📖 Documentation complète : `PATATOR_GUIDE.md`
 - 🚀 Démarrage rapide : `QUICKSTART.md`
-- 📊 Vue d'ensemble : `RECAP_COMPLET_PROJET.md`
+- 📊 Vue d'ensemble : `AUDIT_RENDU_PROJET.md`
 
 ---
 

@@ -93,9 +93,16 @@ def main() -> int:
         ROOT_DIR / "security" / "minio" / "policies" / "gold-reader.json",
     ]
     policies_ok = all(path.exists() for path in policy_files)
-    tls_ok = (ROOT_DIR / "security" / "minio" / "certs" / "public.crt").exists() and (
-        ROOT_DIR / "security" / "minio" / "certs" / "private.key"
-    ).exists()
+    cert_public = ROOT_DIR / "security" / "minio" / "certs" / "public.crt"
+    cert_private = ROOT_DIR / "security" / "minio" / "certs" / "private.key"
+    tls_ok = cert_public.exists() and cert_private.exists()
+    tls_generated = False
+    tls_generate_exit = None
+    tls_generate_stderr = ""
+    if not tls_ok:
+        tls_generate_exit, _, tls_generate_stderr = run_cmd(["bash", "scripts/generate_minio_tls_certs.sh"], timeout=120)
+        tls_generated = tls_generate_exit == 0
+        tls_ok = cert_public.exists() and cert_private.exists()
     compose_text = (ROOT_DIR / "docker-compose.yml").read_text(encoding="utf-8")
     compose_security_ok = all(
         token in compose_text
@@ -114,6 +121,9 @@ def main() -> int:
             details={
                 "policies_ok": policies_ok,
                 "tls_certs_present": tls_ok,
+                "tls_generated_during_validation": tls_generated,
+                "tls_generate_exit_code": tls_generate_exit,
+                "tls_generate_stderr_tail": tls_generate_stderr[-300:],
                 "compose_security_ok": compose_security_ok,
                 "policy_files": [str(p) for p in policy_files],
             },
