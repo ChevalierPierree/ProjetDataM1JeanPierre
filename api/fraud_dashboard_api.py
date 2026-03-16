@@ -8,7 +8,7 @@ Permet de:
 - Historique décisions
 """
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import List, Optional, Tuple
@@ -21,12 +21,14 @@ import threading
 import time
 import os
 import random
+import hashlib
+import hmac
 import psycopg2
 import site
 import sys
 from pathlib import Path
 from collections import defaultdict, Counter
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from uuid import uuid4
 
 
@@ -73,11 +75,18 @@ app = FastAPI(
     version="1.0.0"
 )
 
+CORS_ALLOW_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("CORS_ALLOW_ORIGINS", "*").split(",")
+    if origin.strip()
+] or ["*"]
+CORS_ALLOW_CREDENTIALS = False if CORS_ALLOW_ORIGINS == ["*"] else True
+
 # CORS pour permettre l'accès depuis le frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=CORS_ALLOW_ORIGINS,
+    allow_credentials=CORS_ALLOW_CREDENTIALS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -279,10 +288,18 @@ ID_CARDS_DIR = DATASET_DIR / "synthetic_id_cards"
 ID_LABELS_FILE = DATASET_DIR / "synthetic_id_labels.csv"
 ID_LABELS_CACHE = None
 BASE_DIR = Path(__file__).resolve().parent.parent
+ID_FINGERPRINT_MODEL_FILE = BASE_DIR / "models" / "id_card_fingerprint_model.json"
+ID_FINGERPRINT_MODEL_CACHE = None
 RUNTIME_LOG_FILE = BASE_DIR / "logs" / "runtime_refresh.log"
 RUNTIME_REFRESH_LOCK = threading.Lock()
 RUNTIME_SCALING_PROCESS = None
 RUNTIME_ALERTS_PROCESS = None
+
+API_KEY_REQUIRED = os.getenv("API_KEY_REQUIRED", "false").strip().lower() in {"1", "true", "yes", "on"}
+API_KEY_HEADER = os.getenv("API_KEY_HEADER", "X-API-Key")
+API_KEY_VALUE = os.getenv("API_KEY_VALUE", "")
+API_KEY_EXEMPT_PATH_PREFIXES = ("/docs", "/redoc", "/openapi.json", "/health")
+DOCUMENT_HASH_SALT = os.getenv("DOCUMENT_HASH_SALT", "kivendtout-dev-salt")
 
 FRAUD_REASON_POOL = [
     "FIRST_PAYMENT",
@@ -298,14 +315,47 @@ FRAUD_REASON_POOL = [
     "GEO_MISMATCH"
 ]
 
+
+@app.middleware("http")
+async def api_key_middleware(request: Request, call_next):
+    """
+    Active une protection API key sur les endpoints /api/* si demandé par l'environnement.
+    Par défaut désactivé pour conserver la compatibilité dev.
+    """
+    path = request.url.path
+    if not API_KEY_REQUIRED:
+        return await call_next(request)
+
+    if path.startswith(API_KEY_EXEMPT_PATH_PREFIXES):
+        return await call_next(request)
+
+    if not path.startswith("/api/"):
+        return await call_next(request)
+
+    provided_key = request.headers.get(API_KEY_HEADER, "")
+    if not API_KEY_VALUE or not hmac.compare_digest(provided_key, API_KEY_VALUE):
+        return JSONResponse(
+            status_code=401,
+            content={
+                "detail": "Unauthorized: invalid or missing API key",
+                "required_header": API_KEY_HEADER,
+            },
+        )
+    return await call_next(request)
+
+
+def hash_document_number(document_number: str) -> str:
+    raw = f"{DOCUMENT_HASH_SALT}:{document_number}".encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()
+
 def get_db_connection():
     """Connexion PostgreSQL"""
     return psycopg2.connect(
-        host='localhost',
-        port=5432,
-        database='kivendtout',
-        user='postgres',
-        password='postgres'
+        host=os.getenv("POSTGRES_HOST", "localhost"),
+        port=int(os.getenv("POSTGRES_PORT", "5432")),
+        database=os.getenv("POSTGRES_DB", "kivendtout"),
+        user=os.getenv("POSTGRES_USER", "postgres"),
+        password=os.getenv("POSTGRES_PASSWORD", "postgres")
     )
 
 def load_id_labels():
@@ -333,6 +383,55 @@ def load_id_labels():
     ID_LABELS_CACHE = cache
     return ID_LABELS_CACHE
 
+
+def load_id_fingerprint_model():
+    """
+    Charge le modèle de reconnaissance d'image basé empreinte SHA-256.
+    Format attendu:
+    {
+      "model_type": "sha256_fingerprint_lookup",
+      "hash_to_birthdate": {"<sha256>": "YYYY-MM-DD", ...}
+    }
+    """
+    global ID_FINGERPRINT_MODEL_CACHE
+    if ID_FINGERPRINT_MODEL_CACHE is not None:
+        return ID_FINGERPRINT_MODEL_CACHE
+
+    if not ID_FINGERPRINT_MODEL_FILE.exists():
+        ID_FINGERPRINT_MODEL_CACHE = {}
+        return ID_FINGERPRINT_MODEL_CACHE
+
+    try:
+        with ID_FINGERPRINT_MODEL_FILE.open("r", encoding="utf-8") as fh:
+            payload = json.load(fh)
+        hash_to_birthdate = payload.get("hash_to_birthdate", {})
+        if not isinstance(hash_to_birthdate, dict):
+            hash_to_birthdate = {}
+        ID_FINGERPRINT_MODEL_CACHE = {
+            "model_type": payload.get("model_type", "sha256_fingerprint_lookup"),
+            "version": payload.get("version", "unknown"),
+            "trained_at": payload.get("trained_at"),
+            "hash_to_birthdate": hash_to_birthdate,
+            "records": len(hash_to_birthdate),
+        }
+        return ID_FINGERPRINT_MODEL_CACHE
+    except Exception as e:
+        print(f"Erreur chargement modèle empreinte CNI: {e}")
+        ID_FINGERPRINT_MODEL_CACHE = {}
+        return ID_FINGERPRINT_MODEL_CACHE
+
+
+def predict_birthdate_from_id_fingerprint(card_path: Path) -> Optional[str]:
+    model = load_id_fingerprint_model()
+    if not model:
+        return None
+    hash_to_birthdate = model.get("hash_to_birthdate", {})
+    if not hash_to_birthdate:
+        return None
+
+    digest = hashlib.sha256(card_path.read_bytes()).hexdigest()
+    return hash_to_birthdate.get(digest)
+
 def compute_age(birthdate_str: str) -> int:
     birth = datetime.strptime(birthdate_str, "%Y-%m-%d").date()
     today = date.today()
@@ -347,11 +446,24 @@ def extract_age_from_id_card(id_card_file: str):
     if not card_path.exists():
         raise HTTPException(status_code=404, detail=f"ID card not found: {safe_name}")
 
-    labels = load_id_labels()
-    if safe_name not in labels:
-        raise HTTPException(status_code=400, detail=f"No birthdate label found for card: {safe_name}")
+    birthdate_str = None
+    model_enabled = os.getenv("ID_CARD_MODEL_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"}
+    if model_enabled:
+        try:
+            birthdate_str = predict_birthdate_from_id_fingerprint(card_path)
+        except Exception as e:
+            print(f"Erreur reconnaissance image CNI (fallback labels): {e}")
 
-    birthdate_str = labels[safe_name]
+    if not birthdate_str:
+        labels = load_id_labels()
+        birthdate_str = labels.get(safe_name)
+
+    if not birthdate_str:
+        raise HTTPException(
+            status_code=400,
+            detail=f"No birthdate found via model or labels for card: {safe_name}"
+        )
+
     age = compute_age(birthdate_str)
     return safe_name, birthdate_str, age
 
@@ -885,9 +997,36 @@ async def root():
             "fraud_reason_alerts": "/api/fraud/reasons/{reason}/alerts",
             "runtime_refresh": "/api/runtime/refresh",
             "runtime_logs": "/api/runtime/logs",
+            "runtime_security": "/api/runtime/security",
+            "id_model_status": "/api/id-model/status",
             "stats": "/api/stats",
             "sync": "/api/sync"
         }
+    }
+
+
+@app.get("/api/runtime/security")
+async def get_runtime_security():
+    return {
+        "api_key_required": API_KEY_REQUIRED,
+        "api_key_header": API_KEY_HEADER,
+        "cors_allow_origins": CORS_ALLOW_ORIGINS,
+        "cors_allow_credentials": CORS_ALLOW_CREDENTIALS,
+    }
+
+
+@app.get("/api/id-model/status")
+async def get_id_model_status():
+    model = load_id_fingerprint_model()
+    return {
+        "enabled": os.getenv("ID_CARD_MODEL_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"},
+        "model_file": str(ID_FINGERPRINT_MODEL_FILE),
+        "model_found": ID_FINGERPRINT_MODEL_FILE.exists(),
+        "model_loaded": bool(model),
+        "records": int(model.get("records", 0)) if model else 0,
+        "model_type": model.get("model_type") if model else None,
+        "version": model.get("version") if model else None,
+        "trained_at": model.get("trained_at") if model else None,
     }
 
 @app.get("/api/alerts", response_model=List[FraudAlert])
@@ -1168,7 +1307,7 @@ async def get_identity_verifications(
 
 @app.post("/api/verify-id")
 async def verify_identity(payload: IdentityVerificationRequest):
-    """Enregistre une vérification d'identité manuelle/API."""
+    """Enregistre une vérification d'identité manuelle/API (document hashé)."""
     conn = get_db_connection()
     cursor = conn.cursor()
 
@@ -1185,6 +1324,8 @@ async def verify_identity(payload: IdentityVerificationRequest):
     else:
         verification_status = "pending"
 
+    doc_number_hash = hash_document_number(payload.document_number)
+
     cursor.execute("""
         INSERT INTO identity_verifications (
             customer_id, verification_date, document_type, document_number,
@@ -1196,7 +1337,7 @@ async def verify_identity(payload: IdentityVerificationRequest):
         payload.customer_id,
         datetime.now(),
         payload.document_type,
-        payload.document_number,
+        doc_number_hash,
         verification_status,
         payload.verification_method,
         payload.id_card_image_path,
@@ -1212,7 +1353,8 @@ async def verify_identity(payload: IdentityVerificationRequest):
         "message": "Identity verification saved",
         "verification_id": verification_id,
         "customer_id": payload.customer_id,
-        "verification_status": verification_status
+        "verification_status": verification_status,
+        "document_number_stored_as": "sha256"
     }
 
 @app.get("/api/identity/stats", response_model=IdentityStats)

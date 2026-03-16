@@ -1,0 +1,128 @@
+{
+  "generated_at": "2026-03-16T08:53:17.358729+00:00",
+  "api_url": "http://localhost:8000",
+  "summary": {
+    "requirements_total": 11,
+    "passed": 11,
+    "failed": 0,
+    "success_rate_percent": 100.0,
+    "global_status": "PASS"
+  },
+  "checks": [
+    {
+      "requirement_id": 1,
+      "title": "Stockage relationnel fiable et int\u00e8gre",
+      "status": "PASS",
+      "details": {
+        "customers": 2500,
+        "orders": 3464,
+        "orphan_orders": 0
+      }
+    },
+    {
+      "requirement_id": 2,
+      "title": "Exploitation des \u00e9v\u00e9nements utilisateurs",
+      "status": "PASS",
+      "details": {
+        "events_total": 71694,
+        "event_types_count": 11
+      }
+    },
+    {
+      "requirement_id": 3,
+      "title": "Centralisation brute historis\u00e9e",
+      "status": "PASS",
+      "details": {
+        "exit_code": 0,
+        "manifest_file": "/Users/jeanmacario/Documents/GitHub/ProjetDataM1JeanPierre/logs/data_lake_snapshot_20260316T085300Z.json",
+        "stderr_tail": "ing back to the standard locale (\"C\").\nperl: warning: Setting locale failed.\nperl: warning: Please check that your locale settings:\n\tLC_ALL = \"C.UTF-8\",\n\tLC_CTYPE = \"C.UTF-8\",\n\tLANG = \"C.UTF-8\"\n    are supported and installed on your system.\nperl: warning: Falling back to the standard locale (\"C\").\n"
+      }
+    },
+    {
+      "requirement_id": 4,
+      "title": "D\u00e9tection fraude temps r\u00e9el",
+      "status": "PASS",
+      "details": {
+        "fraud_reasons_count": 11
+      }
+    },
+    {
+      "requirement_id": 5,
+      "title": "Service d'exposition standardis\u00e9",
+      "status": "PASS",
+      "details": {
+        "endpoint_status": {
+          "/api/alerts?limit=1": 200,
+          "/api/stats": 200,
+          "/api/products?limit=2": 200,
+          "/api/orders/checkout": 405
+        }
+      }
+    },
+    {
+      "requirement_id": 6,
+      "title": "Temps d'analyse d\u00e9cisionnelle r\u00e9duit",
+      "status": "PASS",
+      "details": {
+        "attempts": 15,
+        "avg_ms": 23.55,
+        "p95_ms": 24.1,
+        "max_ms": 66.72
+      }
+    },
+    {
+      "requirement_id": 7,
+      "title": "Scalabilit\u00e9 sous charge",
+      "status": "PASS",
+      "details": {
+        "exit_code": 0,
+        "http_errors": 0,
+        "network_errors": 0,
+        "minor_adult_accepted": 0,
+        "p95_ms": 171.6,
+        "stderr_tail": ""
+      }
+    },
+    {
+      "requirement_id": 8,
+      "title": "Continuit\u00e9 de service / r\u00e9silience infra",
+      "status": "PASS",
+      "details": {
+        "running_services_count": 13,
+        "stderr_tail": ""
+      }
+    },
+    {
+      "requirement_id": 9,
+      "title": "S\u00e9curit\u00e9 / protection des acc\u00e8s",
+      "status": "PASS",
+      "details": {
+        "without_key_status": 401,
+        "with_key_status": 200,
+        "api_key_header": "X-API-Key"
+      }
+    },
+    {
+      "requirement_id": 10,
+      "title": "Qualit\u00e9 des donn\u00e9es",
+      "status": "PASS",
+      "details": {
+        "exit_code": 0,
+        "failed_checks": 0,
+        "stderr_tail": ""
+      }
+    },
+    {
+      "requirement_id": 11,
+      "title": "Reconnaissance CNI fiable + contr\u00f4le majorit\u00e9",
+      "status": "PASS",
+      "details": {
+        "model_exit_code": 0,
+        "model_accuracy_percent": 100.0,
+        "minor_checkout_status": 403,
+        "adult_checkout_status": 200,
+        "model_stderr_tail": ""
+      }
+    }
+  ]
+}
