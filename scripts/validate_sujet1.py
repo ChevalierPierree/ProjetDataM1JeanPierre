@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Validation automatisée des 11 exigences du Sujet 1 (KiVendTout).
-Génère un rapport JSON de preuves pour soutenance.
+Genere un rapport JSON de preuves pour la validation projet.
 """
 
 from __future__ import annotations
@@ -116,7 +116,7 @@ def launch_temp_secured_api() -> Tuple[subprocess.Popen, Dict]:
     env = os.environ.copy()
     env["API_KEY_REQUIRED"] = "true"
     env["API_RBAC_ENABLED"] = "false"
-    env["API_KEY_VALUE"] = "soutenance-demo-key"
+    env["API_KEY_VALUE"] = "validation-demo-key"
     env["API_KEY_HEADER"] = "X-API-Key"
     cmd = [
         str(ROOT_DIR / ".venv" / "bin" / "python"),
@@ -138,7 +138,7 @@ def launch_temp_secured_api() -> Tuple[subprocess.Popen, Dict]:
     for _ in range(30):
         try:
             requests.get("http://127.0.0.1:8010/health", timeout=2).raise_for_status()
-            return proc, {"api_key_header": "X-API-Key", "api_key_value": "soutenance-demo-key"}
+            return proc, {"api_key_header": "X-API-Key", "api_key_value": "validation-demo-key"}
         except Exception:
             time.sleep(0.5)
     proc.terminate()
@@ -156,7 +156,7 @@ def stop_process(proc: subprocess.Popen) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Validation Sujet 1 soutenance")
+    parser = argparse.ArgumentParser(description="Validation Sujet 1")
     parser.add_argument("--output", default="logs/sujet1_validation_report.json", help="Rapport JSON")
     args = parser.parse_args()
 

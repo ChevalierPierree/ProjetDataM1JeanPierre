@@ -1,211 +1,125 @@
-# 🛒 KiVendTout - Architecture Data Engineering & IA
+# KiVendTout
 
-**Projet de Master 1 - Data Engineering & IA**  
-**EFREI - Février 2026**
+Plateforme data pour e-commerce avec detection de fraude, controle d'identite, supervision temps reel et pipelines de transfert.
 
----
+## Vue d'ensemble
 
-## 📋 À propos
+Le projet couvre quatre besoins operationnels:
+- detection de fraude et traitement des alertes,
+- blocage des commandes 18+ pour les mineurs,
+- historisation et transfert des donnees,
+- outillage de validation, charge et resilience.
 
-Architecture de données complète pour plateforme e-commerce avec :
-- 🛡️ Détection de fraude en temps réel
-- 📊 Business Intelligence temps réel
-- 🤖 Reconnaissance de cartes d'identité (IA)
-- 🔄 Pipelines de données distribués
-- 📈 Haute disponibilité et scalabilité
+Le socle technique repose sur PostgreSQL, MongoDB, Kafka, MinIO, FastAPI et un front de supervision sur `7600`.
 
----
+## Demarrage rapide
 
-## 🚀 Démarrage rapide
-
-### ⚡ Méthode PATATOR (Recommandée)
-
-**Un seul mot lance tout !**
+### Methode automatisee
 
 ```bash
-# Cloner le projet
-git clone https://github.com/ChevalierPierree/ProjetDataM1JeanPierre.git
-cd ProjetDataM1JeanPierre
-
-# Environnement Python local (recommandé)
+cd /Users/jeanmacario/Documents/GitHub/ProjetDataM1JeanPierre
 python3 -m venv .venv
 source .venv/bin/activate
-
-# Installer les dépendances nécessaires à PATATOR
 python -m pip install --upgrade pip
 python -m pip install -r requirements.patator.txt
-
-# Lancer TOUT en une commande
-chmod +x patator
 ./patator
 ```
 
-🎯 **PATATOR** lance automatiquement :
-- ✅ 13 services Docker (Kafka, Flink, PostgreSQL, MongoDB, etc.)
-- ✅ Chargement des données (71,694 événements)
-- ✅ Détection de fraude temps réel et ingestion des alertes
-- ✅ API Backend (FastAPI sur port 8000)
-- ✅ Dashboard Web (sur port 7600)
-- ✅ Ouvre le dashboard dans le navigateur
-
-**Durée** : 3-5 minutes | **Documentation** : [PATATOR_GUIDE.md](./PATATOR_GUIDE.md)
-
-### 📐 KPI Fraude (définition)
-
-- `fraud_rate` = `paiements frauduleux labelisés / paiements totaux` (en %)
-- `total_alerts` = nombre d'alertes règles (peut être supérieur aux paiements frauduleux)
-- `fraudulent_payments` = volume de paiements labelisés fraude
-- `customer_alert_coverage` = `% de clients ayant au moins une alerte`
-
-Ces définitions évitent un taux > 100% et rendent les chiffres dashboard cohérents.
-
-### ✅ Conformité parfaite (RBAC, Data Lake sécurité, micro-batch, résilience, KPI transfert)
+### Methode de verification recommandee
 
 ```bash
-# 1) RBAC + quotas API
-./.venv/bin/python scripts/test_api_rbac_rate_limit.py
+cd /Users/jeanmacario/Documents/GitHub/ProjetDataM1JeanPierre
+source .venv/bin/activate
+bash scripts/checklist_and_launch.sh
+```
 
-# 2) Sécurité Data Lake (TLS + rotation secrets)
-bash scripts/generate_minio_tls_certs.sh
-bash scripts/rotate_minio_credentials.sh all
+## Commandes utiles
 
-# 3) Flux micro-batch MongoDB -> PostgreSQL
-./.venv/bin/python scripts/micro_batch_events_to_postgres.py --run-once --window-seconds 30
+### Validation globale
 
-# 4) Tests de charge DB + résilience
-./.venv/bin/python scripts/test_db_load.py --pg-requests 120 --mongo-requests 120 --concurrency 12
-./.venv/bin/python scripts/test_resilience_failover.py --service postgres --dry-run
-
-# 5) Validation globale
+```bash
+./.venv/bin/python scripts/validate_sujet1.py
 ./.venv/bin/python scripts/validate_perfect_compliance.py
+./.venv/bin/python scripts/data_quality_checks.py
 ```
 
-Preuves:
-- `logs/api_rbac_rate_limit_report.json`
-- `logs/db_load_test_report.json`
-- `logs/resilience_failover_report.json`
-- `logs/perfect_compliance_report.json`
-- `logs/transfer_kpi_history.jsonl`
-
-Nouveaux endpoints:
-- `GET /api/micro-batch/stats`
-- `GET /api/transfer/kpis`
-- `GET /api/kpis/readable` (lecture humaine des KPI + interprétation)
-
-Nouveau dashboard:
-- `http://localhost:7600/transfer_kpi_dashboard.html`
-
----
-
-### 🛠️ Méthode manuelle (pour développeurs)
+### Demonstrations metier
 
 ```bash
-# Créer le fichier .env
-cp .env.example .env
-
-# Démarrer les services Docker
-docker compose up -d
-
-# Charger les données
-python3 scripts/load_data_to_postgres.py
-python3 scripts/load_events_to_mongodb.py
-
-# Configurer Kafka
-python3 scripts/create_kafka_topics.py
-python3 scripts/stream_events_to_kafka.py
-
-# Lancer la détection de fraude
-python3 scripts/fraud_detection_realtime.py
-
-# Lancer l'API et le dashboard
-python3 api/fraud_dashboard_api.py &
-cd dashboard && python3 -m http.server 7600 &
-
-# Accéder au dashboard
-open http://localhost:7600/fraud_dashboard.html
+bash scripts/test_use_cases.sh
+bash scripts/run_micro_batch.sh once
+bash scripts/test_alert_notifications.sh
+curl -X POST http://localhost:8000/api/data-factory/payments-live-3m/run -H 'Content-Type: application/json'
+curl -X POST http://localhost:8000/api/data-factory/massive-fraud-orders-3m/run -H 'Content-Type: application/json'
+./.venv/bin/python scripts/promote_data_lake_layers.py
 ```
 
----
+### Retour a l'etat initial
 
-## 📚 Documentation
-
-Documentation de rendu (racine) + annexes techniques (`markdowns/`) :
-
-| Document | Description |
-|----------|-------------|
-| [**⚡ PATATOR Guide**](./PATATOR_GUIDE.md) | Script de démarrage automatique (NOUVEAU !) |
-| [**🚀 Quick Start**](./QUICKSTART.md) | Démarrage en 3 commandes |
-| [**🛠️ Installation**](./INSTALLATION.md) | Guide d'installation détaillé |
-| [**🎤 Demo Soutenance**](./DEMO_SOUTENANCE.md) | Script de démo 5-7 minutes |
-| [**✅ Checklist Sujet 1**](./SUJET1_SOUTENANCE_CHECKLIST.md) | Exécution et preuves attendues |
-| [**📋 Audit Rendu**](./AUDIT_RENDU_PROJET.md) | État des lieux + périmètre + nettoyage |
-| [**🛠️ Stack Technique**](./markdowns/STACK_TECHNIQUE.md) | Justification des choix technologiques |
-| [**📊 Récap Avancement**](./markdowns/RECAP_AVANCEMENT.md) | État d'avancement du projet |
-| [**✅ Session Finale**](./markdowns/SESSION_FINALE.md) | Résumé de la session de setup |
-
----
-
-## 🏗️ Architecture
-
-```
-PostgreSQL (OLTP) ─┐
-MongoDB (NoSQL)    ├─→ Kafka (Streaming) ─→ Flink (Processing)
-MinIO (Data Lake)  ─┘                              │
-                                                   ↓
-                                            PostgreSQL DWH
-                                                   │
-                                    ┌──────────────┼──────────────┐
-                                    ↓              ↓              ↓
-                                FastAPI        Superset      Grafana
-                                 (API)           (BI)      (Monitoring)
+```bash
+curl -X POST http://localhost:8000/api/system/reset-data \
+  -H 'Content-Type: application/json' \
+  --data-binary '{"confirm":true,"clear_runtime_artifacts":true,"stop_live_jobs":true}'
 ```
 
----
+### Generer le pack de livraison
 
-## 🛠️ Stack Technologique
+```bash
+bash scripts/build_delivery_pack.sh
+```
 
-- **Base de données** : PostgreSQL, MongoDB
-- **Data Lake** : MinIO (S3-compatible) + Parquet
-- **Streaming** : Apache Kafka (cluster HA)
-- **Processing** : Apache Flink
-- **Orchestration** : Apache Airflow
-- **Transformation** : dbt
-- **IA/ML** : TensorFlow, OpenCV
-- **API** : FastAPI
-- **BI** : Apache Superset
-- **Monitoring** : Prometheus + Grafana
-- **Infra** : Docker Compose
+## Dashboards
 
----
+- Overview: `http://localhost:7600/index.html`
+- Fraude: `http://localhost:7600/fraud_dashboard.html`
+- Typologies: `http://localhost:7600/fraud_types_dashboard.html`
+- Identite: `http://localhost:7600/id_cards_dashboard.html`
+- Transferts: `http://localhost:7600/transfer_kpi_dashboard.html`
+- Use cases: `http://localhost:7600/use_cases_dashboard.html`
 
-## 🌐 Services & Accès
+## Indicateurs importants
 
-| Service | URL | Identifiants |
-|---------|-----|--------------|
-| MinIO Console | http://localhost:9001 | `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` (dans `.env`) |
-| Kafka UI | http://localhost:8082 | - |
-| Grafana | http://localhost:3000 | admin / admin |
-| Prometheus | http://localhost:9090 | - |
-| PostgreSQL | localhost:5432 | postgres / postgres |
-| MongoDB | localhost:27017 | admin / admin |
+- `fraud_rate` = `fraudulent_payments / successful_payments`
+- `total_alerts` = volume d'alertes regles, distinct du volume de paiements
+- `customer_alert_coverage` = part des clients couverts par au moins une alerte
+- KPI transfert = latence, debit, volume traite, sante pipeline
 
----
+## Endpoints utiles
 
-## 👥 Équipe
+- `GET /api/stats`: KPI fraude globaux
+- `GET /api/payments/stats?window_hours=24`: KPI paiements recentes et `fraud_rate` live
+- `GET /api/data-lake/status`: etat bronze -> silver -> gold publie dans MinIO
+- `GET /api/data-factory`: catalogue des actions live et pipeline
+- `POST /api/data-factory/payments-live-3m/run`: flux paiements temps reel
+- `POST /api/data-factory/massive-fraud-orders-3m/run`: episode fraude commandes massif sur 3 minutes
+- `POST /api/data-factory/data-lake-pipeline/run`: promotion MinIO bronze -> silver -> gold
 
-- **Pierre Chevalier** - Data Engineering & Infrastructure
-- **[Votre binôme]** - [Rôle]
+## Documentation racine
 
----
+- [PATATOR_GUIDE.md](./PATATOR_GUIDE.md): demarrage automatise
+- [INSTALLATION.md](./INSTALLATION.md): installation detaillee
+- [QUICKSTART.md](./QUICKSTART.md): sequence courte de lancement
+- [DEMO_PROJET.md](./DEMO_PROJET.md): runbook de demonstration
+- [SUJET1_CHECKLIST.md](./SUJET1_CHECKLIST.md): checklist de validation
+- [SOMMAIRE_MEMOIRE_TECHNIQUE.md](./SOMMAIRE_MEMOIRE_TECHNIQUE.md): plan conseille pour le memoire technique
+- [PROMPT_PRESENTATION_IA.md](./PROMPT_PRESENTATION_IA.md): prompt a fournir a une IA pour generer la presentation
+- [AUDIT_CONSIGNE_INITIALE.md](./AUDIT_CONSIGNE_INITIALE.md): cadrage initial et regles metier
+- [AUDIT_RENDU_PROJET.md](./AUDIT_RENDU_PROJET.md): audit de conformite et hygiene de depot
+- [AUDIT_FONCTIONNEL_FINAL.md](./AUDIT_FONCTIONNEL_FINAL.md): verification finale des features annoncees et de leur etat reel
+- [PACK_RENDU.md](./PACK_RENDU.md): contenu et generation du pack de livraison
 
-## 📝 Licence
+## Services exposes
 
-Projet académique - EFREI M1 Data Engineering & IA - 2026
+- API FastAPI: `http://localhost:8000`
+- Dashboard web: `http://localhost:7600`
+- Kafka UI: `http://localhost:8082`
+- Prometheus: `http://localhost:9090`
+- Grafana: `http://localhost:3000`
+- MinIO console: `http://localhost:9001`
 
----
+## Resultat attendu avant presentation
 
-## 🆘 Support
-
-Pour toute question, consultez la documentation de cette page et les annexes dans [`markdowns/`](./markdowns/).
-
-**Dernière mise à jour** : 25 février 2026
+- `bash scripts/checklist_and_launch.sh` retourne `33/33 OK`
+- `scripts/validate_sujet1.py` retourne `PASS 11/11`
+- `scripts/validate_perfect_compliance.py` retourne `PASS 6/6`
+- `scripts/data_quality_checks.py` retourne `18/18 PASS`

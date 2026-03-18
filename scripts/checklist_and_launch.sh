@@ -60,13 +60,15 @@ wait_url() {
 
 start_api_if_needed() {
   local python_bin="$1"
+  local api_pid_file="$LOG_DIR/fraud_dashboard_api.pid"
   if wait_url "http://localhost:${API_PORT}/health" 2; then
     print_ok "API active sur ${API_PORT}"
     return 0
   fi
 
   echo "ℹ️ API inactive, démarrage..."
-  "$python_bin" "$PROJECT_DIR/api/fraud_dashboard_api.py" > "$LOG_DIR/fraud_dashboard_api.log" 2>&1 &
+  nohup "$python_bin" "$PROJECT_DIR/api/fraud_dashboard_api.py" > "$LOG_DIR/fraud_dashboard_api.log" 2>&1 < /dev/null &
+  echo $! > "$api_pid_file"
   if wait_url "http://localhost:${API_PORT}/health" 30; then
     print_ok "API démarrée sur ${API_PORT}"
     return 0
@@ -77,6 +79,7 @@ start_api_if_needed() {
 
 start_dashboard_if_needed() {
   local python_bin="$1"
+  local dashboard_pid_file="$LOG_DIR/http_server.pid"
   if wait_url "http://localhost:${DASHBOARD_PORT}/index.html" 2; then
     print_ok "Dashboard web actif sur ${DASHBOARD_PORT}"
     return 0
@@ -85,7 +88,8 @@ start_dashboard_if_needed() {
   echo "ℹ️ Dashboard inactif, démarrage..."
   (
     cd "$PROJECT_DIR/dashboard"
-    "$python_bin" -m http.server "$DASHBOARD_PORT" > "$LOG_DIR/http_server.log" 2>&1 &
+    nohup "$python_bin" -m http.server "$DASHBOARD_PORT" > "$LOG_DIR/http_server.log" 2>&1 < /dev/null &
+    echo $! > "$dashboard_pid_file"
   )
 
   if wait_url "http://localhost:${DASHBOARD_PORT}/index.html" 20; then
@@ -135,11 +139,22 @@ main() {
   run_check "Page types fraude accessible" "curl -fsS -m 5 http://localhost:${DASHBOARD_PORT}/fraud_types_dashboard.html"
   run_check "Page ID cards accessible" "curl -fsS -m 5 http://localhost:${DASHBOARD_PORT}/id_cards_dashboard.html"
   run_check "Page KPI transfert accessible" "curl -fsS -m 5 http://localhost:${DASHBOARD_PORT}/transfer_kpi_dashboard.html"
+  run_check "Page use cases accessible" "curl -fsS -m 5 http://localhost:${DASHBOARD_PORT}/use_cases_dashboard.html"
   run_check "API /health accessible" "curl -fsS -m 5 http://localhost:${API_PORT}/health"
   run_check "API /stats accessible" "curl -fsS -m 5 http://localhost:${API_PORT}/api/stats"
   run_check "API /checkout/stats accessible" "curl -fsS -m 5 \"http://localhost:${API_PORT}/api/checkout/stats?window_hours=24\""
+  run_check "API /payments/stats accessible" "curl -fsS -m 5 \"http://localhost:${API_PORT}/api/payments/stats?window_hours=24\""
   run_check "API /micro-batch/stats accessible" "curl -fsS -m 5 \"http://localhost:${API_PORT}/api/micro-batch/stats?window_hours=24\""
   run_check "API /transfer/kpis accessible" "curl -fsS -m 5 \"http://localhost:${API_PORT}/api/transfer/kpis?limit=20\""
+  run_check "API /data-lake/status accessible" "curl -fsS -m 5 \"http://localhost:${API_PORT}/api/data-lake/status\""
+  run_check "API /kpis/readable accessible" "curl -fsS -m 5 \"http://localhost:${API_PORT}/api/kpis/readable?limit=20&micro_batch_window_hours=24\""
+  run_check "API /alert-notifications/config accessible" "curl -fsS -m 5 \"http://localhost:${API_PORT}/api/alert-notifications/config\""
+  run_check "API /alert-notifications/history accessible" "curl -fsS -m 5 \"http://localhost:${API_PORT}/api/alert-notifications/history?limit=5\""
+  run_check "API /use-cases accessible" "curl -fsS -m 5 \"http://localhost:${API_PORT}/api/use-cases?limit_history=4\""
+  run_check "API /presentation/tests accessible" "curl -fsS -m 5 \"http://localhost:${API_PORT}/api/presentation/tests?limit_history=4\""
+  run_check "API /data-factory accessible" "curl -fsS -m 5 \"http://localhost:${API_PORT}/api/data-factory?limit_history=4\""
+  run_check "API /live/state accessible" "curl -fsS -m 5 \"http://localhost:${API_PORT}/api/live/state\""
+  run_check "API /system/reset-status accessible" "curl -fsS -m 5 \"http://localhost:${API_PORT}/api/system/reset-status\""
   run_check "API /runtime/logs accessible" "curl -fsS -m 5 \"http://localhost:${API_PORT}/api/runtime/logs?lines=5\""
 
   echo
@@ -155,7 +170,13 @@ main() {
   echo "- Types:     http://localhost:${DASHBOARD_PORT}/fraud_types_dashboard.html"
   echo "- ID Cards:  http://localhost:${DASHBOARD_PORT}/id_cards_dashboard.html"
   echo "- KPI Xfer:  http://localhost:${DASHBOARD_PORT}/transfer_kpi_dashboard.html"
+  echo "- Use cases: http://localhost:${DASHBOARD_PORT}/use_cases_dashboard.html"
   echo "- API Health:http://localhost:${API_PORT}/health"
+  echo
+  echo "Commandes:"
+  echo "- Micro-batch: bash scripts/run_micro_batch.sh once"
+  echo "- Use cases:   bash scripts/test_use_cases.sh"
+  echo "- Pack de livraison:   bash scripts/build_delivery_pack.sh"
   echo
   echo "Logs:"
   echo "- API:       tail -f $LOG_DIR/fraud_dashboard_api.log"

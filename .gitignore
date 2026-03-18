@@ -18,6 +18,11 @@ logs/*.log
 logs/*.pid
 logs/micro_batch_state.json
 logs/runtime_refresh.log
+logs/alert_notification_history.jsonl
+logs/use_case_history.jsonl
+logs/data_factory_history.jsonl
+logs/presentation_test_history.jsonl
+logs/alert_email_preview/
 
 # Editor/OS
 .DS_Store
@@ -30,5 +35,11 @@ security/minio/certs/private.key
 security/minio/certs/public.crt
 security/minio/certs/CAs/
 
+# Generated delivery bundle
+delivery_pack/
+
 # Project docs workspace requested to ignore
 markdowns/
+
+# Local generated data
+data/external/

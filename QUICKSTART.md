@@ -1,93 +1,35 @@
-# 🚀 PATATOR - Démarrage Ultra-Rapide
+# Quickstart
 
-## Installation en 3 Commandes
+## Sequence minimale
 
-### Option A - Installation directe (recommandée)
 ```bash
-# 1. Cloner
-git clone https://github.com/ChevalierPierree/ProjetDataM1JeanPierre.git
-cd ProjetDataM1JeanPierre && git checkout PierreDump
-
-# 2. Installer dépendances (10 packages essentiels)
-pip3 install -r requirements.txt
-
-# 3. Lancer TOUT
-chmod +x patator && ./patator
-```
-
-### Option B - Avec environnement virtuel
-```bash
-# 1. Cloner
-git clone https://github.com/ChevalierPierree/ProjetDataM1JeanPierre.git
-cd ProjetDataM1JeanPierre && git checkout PierreDump
-
-# 2. Créer et activer venv
+cd /Users/jeanmacario/Documents/GitHub/ProjetDataM1JeanPierre
 python3 -m venv .venv
-source .venv/bin/activate  # Mac/Linux
-# OU : .venv\Scripts\activate  # Windows
-
-# 3. Installer dépendances (utiliser pip, pas pip3 dans le venv!)
-pip install -r requirements.txt
-
-# 4. Lancer TOUT
-chmod +x patator && ./patator
-```
-
-**C'est tout !** 🎉
-
-Le script lance automatiquement :
-- ✅ 13 services Docker
-- ✅ Chargement des données (PostgreSQL + MongoDB)  
-- ✅ Kafka streaming (71,694 événements)
-- ✅ Détection de fraude (10,857 alertes)
-- ✅ API Backend (port 8000)
-- ✅ Dashboard Web (port 7600)
-
-**Dashboard** : http://localhost:7600/fraud_dashboard.html
-
----
-
-## Utilisation pour les Autres
-
-Si quelqu'un récupère ton projet :
-
-```bash
-git clone <ton-repo>
-cd <ton-projet>
-chmod +x patator
+source .venv/bin/activate
+python -m pip install -r requirements.patator.txt
 ./patator
 ```
 
-**Durée totale** : 3-5 minutes ⏱️
-
----
-
-## Alias Global (Optionnel)
-
-Pour taper juste `patator` depuis n'importe où :
+## Verification
 
 ```bash
-# macOS/Linux (zsh)
-echo 'alias patator="$(pwd)/patator"' >> ~/.zshrc
-source ~/.zshrc
-
-# macOS/Linux (bash)
-echo 'alias patator="$(pwd)/patator"' >> ~/.bash_profile
-source ~/.bash_profile
+bash scripts/checklist_and_launch.sh
 ```
 
-Maintenant `patator` fonctionne partout ! 🚀
-
----
-
-## Arrêter
+## Actions utiles
 
 ```bash
-docker compose down
+bash scripts/run_micro_batch.sh once
+bash scripts/test_use_cases.sh
+bash scripts/test_alert_notifications.sh
+bash scripts/build_delivery_pack.sh
 ```
 
----
+## URLs
 
-## Documentation Complète
-
-📖 Voir `INSTALLATION.md` pour le guide détaillé
+- Overview: `http://localhost:7600/index.html`
+- Fraude: `http://localhost:7600/fraud_dashboard.html`
+- Typologies: `http://localhost:7600/fraud_types_dashboard.html`
+- Identite: `http://localhost:7600/id_cards_dashboard.html`
+- Transferts: `http://localhost:7600/transfer_kpi_dashboard.html`
+- API health: `http://localhost:8000/health`

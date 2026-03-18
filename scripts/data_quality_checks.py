@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Contrôles qualité de données pour soutenance Sujet 1.
+Controles qualite de donnees pour le sujet 1.
 Produit un rapport JSON exploitable comme preuve.
 """
 

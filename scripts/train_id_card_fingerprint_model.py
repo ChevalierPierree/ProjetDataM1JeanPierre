@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Construit un modèle de reconnaissance CNI basé sur empreintes SHA-256.
-Objectif: reconnaissance fiable des cartes synthétiques du dataset pour la soutenance.
+Objectif: reconnaissance fiable des cartes synthetiques du dataset pour la validation projet.
 """
 
 from __future__ import annotations

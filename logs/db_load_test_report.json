@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-03-16T13:26:15.868264+00:00",
+  "generated_at": "2026-03-18T10:41:59.787651+00:00",
   "status": "PASS",
   "criteria": {
     "max_errors": 0,
@@ -10,32 +10,32 @@
       "name": "postgres",
       "requests": 120,
       "concurrency": 12,
-      "duration_seconds": 0.586,
-      "throughput_qps": 204.63,
+      "duration_seconds": 0.291,
+      "throughput_qps": 412.66,
       "errors": 0,
       "error_rate_percent": 0.0,
       "latency_ms": {
-        "p50": 51.31,
-        "p95": 110.61,
-        "p99": 122.37,
-        "max": 140.15,
-        "avg": 57.3
+        "p50": 26.25,
+        "p95": 47.89,
+        "p99": 57.97,
+        "max": 59.06,
+        "avg": 28.21
       }
     },
     "mongodb": {
       "name": "mongodb",
       "requests": 120,
       "concurrency": 12,
-      "duration_seconds": 0.454,
-      "throughput_qps": 264.39,
+      "duration_seconds": 0.342,
+      "throughput_qps": 351.33,
       "errors": 0,
       "error_rate_percent": 0.0,
       "latency_ms": {
-        "p50": 37.38,
-        "p95": 82.2,
-        "p99": 92.39,
-        "max": 134.0,
-        "avg": 43.05
+        "p50": 29.39,
+        "p95": 54.48,
+        "p99": 61.39,
+        "max": 65.88,
+        "avg": 32.6
       }
     }
   }

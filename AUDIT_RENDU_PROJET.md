@@ -14,8 +14,8 @@ Date audit: 2026-03-16
 - Conformité Sujet 1: **PASS (11/11)**.
 - Conformité "parfaite" (compléments): **PASS (6/6)**.
 - Qualité des données: **PASS (18/18)**.
-- Projet fonctionnel pour soutenance.
-- Point de vigilance principal: contamination des volumes OLTP par les tests de charge/simulation (normal en environnement de test, à réinitialiser avant passage jury si tu veux des chiffres "dataset pur").
+- Projet fonctionnel pour une presentation immediate.
+- Point de vigilance principal: contamination des volumes OLTP par les tests de charge/simulation (normal en environnement de test, a reinitialiser avant une demonstration si tu veux des chiffres dataset purs).
 
 ## 3) Vérification des données
 
@@ -99,7 +99,7 @@ Ces éléments sont du bruit technique ou peuvent dégrader l'image du rendu:
 - Secret sensible (si commit accidentel):
   - `security/minio/certs/private.key` (à exclure strictement du rendu)
 
-## Priorité P2 (à archiver hors racine ou exclure du rendu jury)
+## Priorite P2 (a archiver hors racine ou exclure du rendu)
 Documentation redondante ou contextuelle non nécessaire au périmètre Sujet 1:
 - Docs "personnelles/setup":
   - `FIX_VENV_JEAN.md`
@@ -129,8 +129,8 @@ Recommandation: retirer ce document du pack de rendu ou le réécrire complètem
 ## 7) Pack de rendu recommandé (minimal, propre)
 - `README.md`
 - `INSTALLATION.md`
-- `DEMO_SOUTENANCE.md`
-- `SUJET1_SOUTENANCE_CHECKLIST.md`
+- `DEMO_PROJET.md`
+- `SUJET1_CHECKLIST.md`
 - `AUDIT_CONSIGNE_INITIALE.md`
 - `api/`, `scripts/`, `dashboard/`, `database/`, `docker-compose.yml`, `kivendtout_dataset/`
 - preuves ciblées dans `logs/`:
@@ -145,7 +145,7 @@ Recommandation: retirer ce document du pack de rendu ou le réécrire complètem
 ## 8) Commandes utiles avant rendu final
 ```bash
 # 1) Vérifier conformité
-./.venv/bin/python scripts/validate_sujet1_soutenance.py
+./.venv/bin/python scripts/validate_sujet1.py
 ./.venv/bin/python scripts/validate_perfect_compliance.py
 
 # 2) Nettoyage artefacts runtime

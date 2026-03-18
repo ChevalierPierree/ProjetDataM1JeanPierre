@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Validation ciblée des 5 points de conformité "parfaite":
+Validation ciblée des points de conformité "parfaite":
 1) RBAC + rate limit
-2) Sécurité Data Lake
+2) Sécurité Data Lake + promotion bronze/silver/gold
 3) Flux micro-batch
 4) Tests charge DB + résilience
 5) KPI de transfert standardisés
@@ -52,6 +52,16 @@ def load_json(path: Path) -> Optional[Dict]:
         return None
 
 
+def latest_promotion_report() -> Optional[Dict]:
+    reports = sorted((LOG_DIR).glob("data_lake_promotion_*.json"), reverse=True)
+    for report in reports:
+        payload = load_json(report)
+        if payload:
+            payload["report_file"] = str(report)
+            return payload
+    return None
+
+
 def api_headers() -> Dict[str, str]:
     header_name = os.getenv("API_KEY_HEADER", "X-API-Key").strip()
     header_value = os.getenv("API_KEY_VALUE", "").strip()
@@ -86,7 +96,7 @@ def main() -> int:
         )
     )
 
-    # 2) Data Lake security
+    # 2) Data Lake security + bronze/silver/gold promotion
     policy_files = [
         ROOT_DIR / "security" / "minio" / "policies" / "bronze-writer.json",
         ROOT_DIR / "security" / "minio" / "policies" / "silver-reader.json",
@@ -114,10 +124,24 @@ def main() -> int:
             "./security/minio/policies:/policies:ro",
         ]
     )
+    promotion_report = latest_promotion_report()
+    promotion_code = None
+    promotion_out = ""
+    promotion_err = ""
+    if not promotion_report:
+        promotion_code, promotion_out, promotion_err = run_cmd(
+            [str(ROOT_DIR / ".venv" / "bin" / "python"), "scripts/promote_data_lake_layers.py"],
+            timeout=240,
+        )
+        promotion_report = latest_promotion_report()
+    layers = (promotion_report or {}).get("layers") or {}
+    silver_ok = (layers.get("silver") or {}).get("status") == "published"
+    gold_ok = (layers.get("gold") or {}).get("status") == "published"
+    promotion_ok = bool(promotion_report) and silver_ok and gold_ok
     checks.append(
         Check(
             item="data_lake_security",
-            status="PASS" if policies_ok and tls_ok and compose_security_ok else "FAIL",
+            status="PASS" if policies_ok and tls_ok and compose_security_ok and promotion_ok else "FAIL",
             details={
                 "policies_ok": policies_ok,
                 "tls_certs_present": tls_ok,
@@ -125,6 +149,11 @@ def main() -> int:
                 "tls_generate_exit_code": tls_generate_exit,
                 "tls_generate_stderr_tail": tls_generate_stderr[-300:],
                 "compose_security_ok": compose_security_ok,
+                "promotion_ok": promotion_ok,
+                "promotion_exit_code": promotion_code,
+                "promotion_stdout_tail": promotion_out[-300:],
+                "promotion_stderr_tail": promotion_err[-300:],
+                "promotion_report": promotion_report,
                 "policy_files": [str(p) for p in policy_files],
             },
         )
@@ -223,12 +252,18 @@ def main() -> int:
         resp = requests.get(f"{API_URL}/api/transfer/kpis?limit=200", timeout=20, headers=headers)
         if resp.status_code == 200:
             payload = resp.json()
+            metrics_count = payload.get("metrics_count") or {}
             kpi_details = {
                 "points": payload.get("points"),
-                "metrics_count": payload.get("metrics_count"),
+                "metrics_count": metrics_count,
                 "summary": payload.get("summary"),
             }
-            kpi_ok = int(payload.get("points", 0) or 0) > 0
+            kpi_ok = (
+                int(payload.get("points", 0) or 0) > 0
+                and int(metrics_count.get("data_lake_snapshot", 0) or 0) > 0
+                and int(metrics_count.get("data_lake_silver", 0) or 0) > 0
+                and int(metrics_count.get("data_lake_gold", 0) or 0) > 0
+            )
     except Exception:
         kpi_ok = False
     checks.append(

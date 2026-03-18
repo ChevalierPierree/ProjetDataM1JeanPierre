@@ -3,96 +3,949 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hub Dashboards - KiVendTout</title>
+    <title>KiVendTout Control Center</title>
+    <link rel="stylesheet" href="dashboard_theme.css">
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(140deg, #4f68d8 0%, #2f3a7a 100%);
-            min-height: 100vh;
-            padding: 24px;
+        .overview-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.85fr);
+            gap: 18px;
+            margin-bottom: 20px;
         }
-        .container { max-width: 1100px; margin: 0 auto; }
-        header {
-            background: white;
-            border-radius: 14px;
-            padding: 24px;
-            margin-bottom: 16px;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+
+        .overview-panel {
+            padding: 28px;
+            border-radius: var(--radius-xl);
+            background: linear-gradient(135deg, #ffffff 0%, #f7fafc 100%);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow-lg);
         }
-        header h1 { color: #1c2e70; margin-bottom: 8px; }
-        header p { color: #4f5f86; }
-        .cards {
+
+        .overview-panel h1 {
+            max-width: 12ch;
+            margin-bottom: 14px;
+            font-family: var(--font-display);
+            font-size: clamp(2.6rem, 5vw, 4.6rem);
+            line-height: 0.95;
+            letter-spacing: -0.05em;
+            color: var(--ink-950);
+        }
+
+        .overview-panel p {
+            max-width: 62ch;
+            color: var(--ink-760);
+            line-height: 1.65;
+            font-size: 1rem;
+        }
+
+        .service-panel {
+            padding: 22px;
+            border-radius: var(--radius-lg);
+            background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow-md);
+        }
+
+        .service-list {
+            display: grid;
+            gap: 12px;
+        }
+
+        .service-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            align-items: center;
+            padding: 14px;
+            border-radius: 16px;
+            background: var(--card-soft);
+            border: 1px solid #e7edf3;
+        }
+
+        .service-row strong {
+            display: block;
+            margin-bottom: 4px;
+            color: var(--ink-950);
+        }
+
+        .service-row span {
+            color: var(--ink-760);
+            font-size: 0.92rem;
+        }
+
+        .summary-note {
+            margin-top: 14px;
+            color: var(--ink-760);
+            line-height: 1.6;
+        }
+
+        .module-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 16px;
+        }
+
+        .module-card {
+            padding: 22px;
+            border-radius: var(--radius-lg);
+            background: #fff;
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow-md);
+            transition: transform 160ms ease, box-shadow 160ms ease;
+        }
+
+        .module-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .module-card h3 {
+            margin-bottom: 10px;
+            font-family: var(--font-display);
+            font-size: 1.55rem;
+            line-height: 1.05;
+            letter-spacing: -0.03em;
+            color: var(--ink-950);
+        }
+
+        .module-card p {
+            color: var(--ink-760);
+            line-height: 1.6;
+            margin-bottom: 14px;
+        }
+
+        .module-card a {
+            display: inline-flex;
+            align-items: center;
+            padding: 11px 14px;
+            border-radius: 12px;
+            text-decoration: none;
+            color: #fff;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--accent) 0%, var(--accent-deep) 100%);
+        }
+
+        .module-meta {
+            display: grid;
+            gap: 8px;
+            margin-bottom: 14px;
+        }
+
+        .module-meta span {
+            display: inline-flex;
+            align-items: center;
+            width: fit-content;
+            padding: 7px 11px;
+            border-radius: 999px;
+            background: rgba(31, 79, 130, 0.08);
+            color: var(--ink-900);
+            font-size: 0.8rem;
+            font-weight: 800;
+        }
+
+        .ops-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
             gap: 14px;
         }
-        .card {
-            background: white;
-            border-radius: 12px;
+
+        .ops-card {
             padding: 18px;
-            box-shadow: 0 5px 18px rgba(0,0,0,0.12);
-            border: 1px solid #e7ecfb;
+            border-radius: 18px;
+            background: #fff;
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow-sm);
         }
-        .card h2 { color: #1f3276; font-size: 20px; margin-bottom: 8px; }
-        .card p { color: #556080; margin-bottom: 12px; }
-        .card a {
-            display: inline-block;
-            text-decoration: none;
-            background: #4f68d8;
-            color: white;
+
+        .ops-card h3 {
+            margin-bottom: 8px;
+            font-size: 1rem;
+            color: var(--ink-950);
+        }
+
+        .ops-card p {
+            color: var(--ink-760);
+            line-height: 1.55;
+        }
+
+        .presentation-layout {
+            display: grid;
+            grid-template-columns: minmax(0, 1.3fr) minmax(320px, 0.7fr);
+            gap: 18px;
+            align-items: start;
+        }
+
+        .presentation-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 14px;
+        }
+
+        .presentation-card {
+            padding: 18px;
+            border-radius: 18px;
+            border: 1px solid var(--border);
+            background: linear-gradient(180deg, #ffffff 0%, #f9fbfd 100%);
+            box-shadow: var(--shadow-sm);
+            display: grid;
+            gap: 12px;
+            cursor: pointer;
+        }
+
+        .presentation-card.active {
+            border-color: rgba(31, 79, 130, 0.28);
+            box-shadow: var(--shadow-lg);
+            transform: translateY(-1px);
+        }
+
+        .presentation-card h3 {
+            margin-bottom: 6px;
+            color: var(--ink-950);
+            font-size: 1rem;
+        }
+
+        .presentation-card p {
+            color: var(--ink-760);
+            line-height: 1.55;
+            font-size: 0.92rem;
+        }
+
+        .presentation-card small {
+            color: var(--ink-640);
+            line-height: 1.45;
+        }
+
+        .presentation-detail {
+            padding: 22px;
+            border-radius: 20px;
+            border: 1px solid var(--border);
+            background: linear-gradient(180deg, #ffffff 0%, #f7fafc 100%);
+            box-shadow: var(--shadow-md);
+            display: grid;
+            gap: 16px;
+            position: sticky;
+            top: 16px;
+        }
+
+        .presentation-detail h3 {
+            margin-bottom: 6px;
+            font-size: 1.18rem;
+            color: var(--ink-950);
+        }
+
+        .presentation-note {
+            display: grid;
+            gap: 10px;
+            padding: 14px 16px;
+            border-radius: 16px;
+            background: var(--card-soft);
+            border: 1px solid var(--border);
+        }
+
+        .presentation-list {
+            display: grid;
+            gap: 8px;
+            margin: 0;
+            padding-left: 18px;
+            color: var(--ink-760);
+        }
+
+        .presentation-links {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .presentation-links a {
+            display: inline-flex;
+            align-items: center;
             padding: 9px 12px;
-            border-radius: 8px;
-            font-weight: 700;
+            border-radius: 999px;
+            text-decoration: none;
+            color: var(--ink-900);
+            background: rgba(31, 79, 130, 0.08);
+            font-size: 0.84rem;
+            font-weight: 800;
         }
-        .checks {
-            margin-top: 16px;
-            background: #f3f7ff;
-            border: 1px solid #dce4fb;
-            border-radius: 10px;
-            padding: 12px;
-            color: #2b3e7c;
-            font-size: 14px;
+
+        .presentation-code {
+            margin: 0;
+            padding: 14px;
+            border-radius: 16px;
+            background: #0f172a;
+            color: #dbeafe;
+            overflow: auto;
+            font-size: 0.8rem;
+            line-height: 1.5;
+        }
+
+        .presentation-inline {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .presentation-sequence {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 16px;
+        }
+
+        .sequence-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 12px;
+            border-radius: 999px;
+            background: rgba(15, 23, 42, 0.05);
+            border: 1px solid var(--border);
+            color: var(--ink-900);
+            font-size: 0.84rem;
+            font-weight: 800;
+        }
+
+        .sequence-chip span {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: var(--accent);
+            color: #fff;
+            font-size: 0.76rem;
+        }
+
+        @media (max-width: 980px) {
+            .overview-grid,
+            .ops-grid,
+            .presentation-layout {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
 <body>
-<div class="container">
-    <header>
-        <h1>📊 Hub Dashboards KiVendTout</h1>
-        <p>Accès direct à tous les dashboards. Depuis chaque page, la navigation vers les autres dashboards est disponible en haut.</p>
-    </header>
+<div class="layout">
+    <nav class="top-nav">
+        <a class="active" href="index.html">Overview</a>
+        <a href="fraud_dashboard.html">Fraude</a>
+        <a href="fraud_types_dashboard.html">Typologies</a>
+        <a href="id_cards_dashboard.html">Identité</a>
+        <a href="transfer_kpi_dashboard.html">Transferts</a>
+        <a href="use_cases_dashboard.html">Use cases</a>
+    </nav>
 
-    <div class="cards">
-        <div class="card">
-            <h2>Fraude Globale</h2>
-            <p>KPI globaux, alertes, décisions analyste, checkout guard 18+.</p>
-            <a href="fraud_dashboard.html">Ouvrir</a>
+    <div class="command-strip">
+        <div>
+            <strong>Scope</strong>
+            <div class="command-row">
+                <span class="command-chip">Overview live</span>
+                <span class="command-chip">Streaming SSE</span>
+                <span class="command-chip">Refresh 1s</span>
+            </div>
         </div>
-
-        <div class="card">
-            <h2>Types de Fraude</h2>
-            <p>Analyse dynamique des raisons (FIRST_PAYMENT, VELOCITY_HIGH, etc.).</p>
-            <a href="fraud_types_dashboard.html">Ouvrir</a>
-        </div>
-
-        <div class="card">
-            <h2>Mineurs & ID Cards</h2>
-            <p>Mineurs identifiés par ID cards et tentatives checkout bloquées.</p>
-            <a href="id_cards_dashboard.html">Ouvrir</a>
-        </div>
-
-        <div class="card">
-            <h2>KPI de Transfert</h2>
-            <p>Latence, capacité et vitesse sur snapshots Data Lake et micro-batch.</p>
-            <a href="transfer_kpi_dashboard.html">Ouvrir</a>
+        <div class="runtime-line">
+            <button class="btn-primary" onclick="refreshPage('manual')">Actualiser la vue</button>
         </div>
     </div>
 
-    <div class="checks">
-        API attendue: <code>http://localhost:8000/health</code><br>
-        Frontend: <code>http://localhost:7600/index.html</code>
-    </div>
+    <section class="overview-grid">
+        <article class="overview-panel">
+            <div class="eyebrow">Operational overview</div>
+            <h1>Une vue d'ensemble claire des signaux clés du projet.</h1>
+            <p>
+                Cette page centralise l'état des services, les indicateurs de risque, le contrôle d'identité
+                et les métriques de transfert. L'objectif est de donner une lecture rapide de la plateforme,
+                puis d'entrer dans chaque module avec le bon niveau de détail.
+            </p>
+        </article>
+        <aside class="service-panel">
+            <div class="section-head" style="margin-bottom:14px;">
+                <div>
+                    <h2>Etat des services</h2>
+                    <p>Disponibilité des principaux composants exposés par l'environnement local.</p>
+                </div>
+            </div>
+            <div class="service-list">
+                <div class="service-row">
+                    <div>
+                        <strong>API fraude</strong>
+                        <span>Port 8000</span>
+                    </div>
+                    <span class="status-pill" id="service-api">-</span>
+                </div>
+                <div class="service-row">
+                    <div>
+                        <strong>Contrôle checkout</strong>
+                        <span>Statistiques 24h</span>
+                    </div>
+                    <span class="status-pill" id="service-checkout">-</span>
+                </div>
+                <div class="service-row">
+                    <div>
+                        <strong>Pipeline de transfert</strong>
+                        <span>Snapshots + micro-batch</span>
+                    </div>
+                    <span class="status-pill" id="service-transfer">-</span>
+                </div>
+            </div>
+            <p class="summary-note" id="overview-copy">Chargement des indicateurs principaux...</p>
+        </aside>
+    </section>
+
+    <section class="metric-grid">
+        <article class="metric-card accent">
+            <div class="label"><span>Fraude</span><span>headline</span></div>
+            <div class="value" id="overview-fraud-rate">-</div>
+            <p class="support" id="overview-fraud-copy">-</p>
+        </article>
+        <article class="metric-card">
+            <div class="label"><span>Alertes</span><span>volume</span></div>
+            <div class="value" id="overview-alerts">-</div>
+            <p class="support" id="overview-alerts-copy">-</p>
+        </article>
+        <article class="metric-card cool">
+            <div class="label"><span>Contrôle 18+</span><span>blocages</span></div>
+            <div class="value" id="overview-underage">-</div>
+            <p class="support" id="overview-underage-copy">-</p>
+        </article>
+        <article class="metric-card gold">
+            <div class="label"><span>Transferts</span><span>pipeline</span></div>
+            <div class="value" id="overview-transfer">-</div>
+            <p class="support" id="overview-transfer-copy">-</p>
+        </article>
+    </section>
+
+    <section class="panel">
+        <div class="section-head">
+            <div>
+                <h2>Modules de supervision</h2>
+                <p>Chaque dashboard correspond à un domaine fonctionnel précis, avec sa propre grille de lecture.</p>
+            </div>
+        </div>
+        <div class="module-grid">
+            <article class="module-card">
+                <div class="module-meta">
+                    <span id="module-fraud-status">Risque global</span>
+                </div>
+                <h3>Fraude</h3>
+                <p>Suivi des alertes, de la couverture client et du traitement analyste, avec accès direct à la file d'alerte.</p>
+                <a href="fraud_dashboard.html">Ouvrir</a>
+            </article>
+            <article class="module-card">
+                <div class="module-meta">
+                    <span id="module-types-status">Typologies actives</span>
+                </div>
+                <h3>Typologies</h3>
+                <p>Répartition par motif de détection, volume par sévérité et lecture ciblée des alertes associées.</p>
+                <a href="fraud_types_dashboard.html">Ouvrir</a>
+            </article>
+            <article class="module-card">
+                <div class="module-meta">
+                    <span id="module-identity-status">Vérification d'identité</span>
+                </div>
+                <h3>Identité</h3>
+                <p>Contrôle de majorité, cartes synthétiques et historique des refus sur produits à restriction d'âge.</p>
+                <a href="id_cards_dashboard.html">Ouvrir</a>
+            </article>
+            <article class="module-card">
+                <div class="module-meta">
+                    <span id="module-transfer-status">Pipeline de données</span>
+                </div>
+                <h3>Transferts</h3>
+                <p>Mesure des snapshots bronze et du micro-batch MongoDB vers PostgreSQL avec indicateurs opérationnels.</p>
+                <a href="transfer_kpi_dashboard.html">Ouvrir</a>
+            </article>
+            <article class="module-card">
+                <div class="module-meta">
+                    <span id="module-use-cases-status">Scenarios testables</span>
+                </div>
+                <h3>Use cases</h3>
+                <p>Executer des cas concrets comme la commande mineur, la verification identite ou l'alerte haute severite.</p>
+                <a href="use_cases_dashboard.html">Ouvrir</a>
+            </article>
+        </div>
+    </section>
+
+    <section class="panel">
+        <div class="section-head">
+            <div>
+                <h2>Parcours de demonstration</h2>
+                <p>Lancer les validations et les episodes live directement depuis l'overview, avec une lecture simple des resultats.</p>
+            </div>
+            <div class="section-meta" id="presentation-meta">-</div>
+        </div>
+        <div class="presentation-sequence">
+            <div class="sequence-chip"><span>1</span>Disponibilite</div>
+            <div class="sequence-chip"><span>2</span>Validation complete</div>
+            <div class="sequence-chip"><span>3</span>Cas metiers</div>
+            <div class="sequence-chip"><span>4</span>Micro-batch + lake</div>
+            <div class="sequence-chip"><span>5</span>Episodes live</div>
+        </div>
+        <div class="control-row" style="margin-bottom:18px;">
+            <label class="control" style="min-width:280px;">
+                <span>Email notifications</span>
+                <input id="presentation-email" type="email" placeholder="ops@kivendtout.fr" />
+            </label>
+            <div class="runtime-line">
+                <span class="command-chip">Lancements directs</span>
+                <span class="command-chip">Resultats traces</span>
+                <span class="command-chip">Lecture en 1 ecran</span>
+            </div>
+        </div>
+        <div class="presentation-layout">
+            <div class="presentation-grid" id="presentation-grid"></div>
+            <aside class="presentation-detail" id="presentation-detail">
+                <div class="empty-state">Selectionnez un test pour afficher son detail.</div>
+            </aside>
+        </div>
+    </section>
+
+    <section class="panel">
+        <div class="section-head">
+            <div>
+                <h2>Fabrique de donnees</h2>
+                <p>Generer en un clic des signaux concrets pour alimenter les dashboards.</p>
+            </div>
+            <div class="section-meta" id="factory-meta">-</div>
+        </div>
+        <div class="factory-grid" id="factory-grid"></div>
+        <div class="divider"></div>
+        <div class="factory-history" id="factory-history"></div>
+    </section>
+
+    <section class="panel">
+        <div class="section-head">
+            <div>
+                <h2>Grille de lecture</h2>
+                <p>Trois angles suffisent pour lire rapidement l'état du projet avant d'entrer dans le détail.</p>
+            </div>
+        </div>
+        <div class="ops-grid">
+            <article class="ops-card">
+                <h3>1. Risque</h3>
+                <p>Lire le taux de fraude, la typologie dominante et le volume d'alertes en attente.</p>
+            </article>
+            <article class="ops-card">
+                <h3>2. Conformité</h3>
+                <p>Vérifier que les contrôles de majorité bloquent bien les achats restreints et que la preuve est historisée.</p>
+            </article>
+            <article class="ops-card">
+                <h3>3. Data flow</h3>
+                <p>Confirmer que les snapshots et le micro-batch alimentent les métriques de transfert attendues.</p>
+            </article>
+        </div>
+    </section>
 </div>
+
+<script src="dashboard_ops.js"></script>
+<script src="live_sync.js"></script>
+<script>
+    const DASHBOARD_HOST = window.location.hostname || 'localhost';
+    const API_HOST = ['127.0.0.1', '0.0.0.0', '::1', '[::1]'].includes(DASHBOARD_HOST) ? 'localhost' : DASHBOARD_HOST;
+    const API_URL = `${window.location.protocol}//${API_HOST}:8000`;
+    let dataFactoryItems = [];
+    let dataFactoryHistory = [];
+    let presentationItems = [];
+    let presentationHistory = [];
+    let presentationSelectedKey = null;
+    let presentationRunningKey = null;
+    let opsController = null;
+
+    function setPill(id, label, tone) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.textContent = label;
+        el.className = 'status-pill';
+        if (tone) el.classList.add(tone);
+    }
+
+    function readableTone(label) {
+        if (['ok', 'actif', 'large', 'faible'].includes(label)) return 'success';
+        if (['modere', 'moyenne', 'inactif'].includes(label)) return 'warning';
+        if (['eleve', 'aucune_donnee'].includes(label)) return 'danger';
+        return 'cool';
+    }
+
+    function escapeHtml(value) {
+        return String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function formatDate(value) {
+        if (!value) return '-';
+        return new Date(value).toLocaleString('fr-FR');
+    }
+
+    function toneForFactoryStatus(status) {
+        if (['ok', 'started'].includes(status)) return 'success';
+        if (status === 'busy') return 'warning';
+        return 'danger';
+    }
+
+    function toneForPresentationStatus(status, passed) {
+        if (status === 'busy') return 'warning';
+        if (passed === true || ['ok', 'started'].includes(status)) return 'success';
+        if (passed === false || status === 'error') return 'danger';
+        return 'cool';
+    }
+
+    function compactJson(value) {
+        if (!value) return '-';
+        const raw = JSON.stringify(value, null, 2);
+        return raw.length > 1800 ? `${raw.slice(0, 1800)}\n...` : raw;
+    }
+
+    function dashboardLabel(path) {
+        const labels = {
+            'index.html': 'Overview',
+            'fraud_dashboard.html': 'Fraude',
+            'fraud_types_dashboard.html': 'Typologies',
+            'id_cards_dashboard.html': 'Identite',
+            'transfer_kpi_dashboard.html': 'Transferts',
+            'use_cases_dashboard.html': 'Use cases'
+        };
+        return labels[path] || path;
+    }
+
+    function renderPresentationDetail() {
+        const panel = document.getElementById('presentation-detail');
+        const item = presentationItems.find(entry => entry.key === presentationSelectedKey) || presentationItems[0];
+        if (!item) {
+            panel.innerHTML = '<div class="empty-state">Aucun test disponible.</div>';
+            return;
+        }
+
+        const lastRun = item.last_run || null;
+        const highlights = (lastRun && lastRun.highlights) || [];
+        const processOutput = lastRun
+            ? (lastRun.process?.stdout_tail || lastRun.process?.output_lines || lastRun.process?.promotion_stdout_tail || [])
+            : [];
+        const processErrors = lastRun
+            ? (lastRun.process?.stderr_tail || lastRun.process?.promotion_stderr_tail || [])
+            : [];
+
+        panel.innerHTML = `
+            <div>
+                <div class="factory-meta" style="margin-bottom:10px;">
+                    <span class="status-pill cool">${escapeHtml(item.category)}</span>
+                    <span class="chip ${toneForPresentationStatus(lastRun?.status, lastRun?.passed)}">${lastRun ? escapeHtml(lastRun.status) : 'new'}</span>
+                </div>
+                <h3>${escapeHtml(item.title)}</h3>
+                <p>${escapeHtml(item.description)}</p>
+            </div>
+            <div class="presentation-note">
+                <strong>Resultat attendu</strong>
+                <span>${escapeHtml(item.expected_outcome)}</span>
+            </div>
+            <div class="presentation-note">
+                <strong>Ce que cela prouve</strong>
+                <span>${escapeHtml(item.impact)}</span>
+            </div>
+            <div class="presentation-note">
+                <strong>Derniere execution</strong>
+                <span>${lastRun ? escapeHtml(lastRun.message) : 'Aucune execution pour le moment.'}</span>
+                <div class="presentation-inline">
+                    <span class="status-pill ${toneForPresentationStatus(lastRun?.status, lastRun?.passed)}">${lastRun ? escapeHtml(lastRun.status) : 'idle'}</span>
+                    <span>${lastRun ? escapeHtml(formatDate(lastRun.timestamp)) : '-'}</span>
+                    <span>${lastRun?.duration_ms ? `${Number(lastRun.duration_ms).toFixed(0)} ms` : '-'}</span>
+                </div>
+            </div>
+            <div class="presentation-note">
+                <strong>Points a lire</strong>
+                ${highlights.length
+                    ? `<ol class="presentation-list">${highlights.map(entry => `<li>${escapeHtml(entry)}</li>`).join('')}</ol>`
+                    : '<span>Les points clefs apparaitront ici apres execution.</span>'}
+            </div>
+            <div class="presentation-note">
+                <strong>Dashboards a ouvrir</strong>
+                <div class="presentation-links">
+                    ${(item.dashboards || []).map(path => `<a href="${escapeHtml(path)}">${escapeHtml(dashboardLabel(path))}</a>`).join('')}
+                </div>
+            </div>
+            <div class="presentation-note">
+                <strong>Details techniques</strong>
+                <pre class="presentation-code">${escapeHtml(compactJson(lastRun?.resources || lastRun?.response || {}))}</pre>
+            </div>
+            ${(processOutput.length || processErrors.length) ? `
+                <div class="presentation-note">
+                    <strong>Sortie recente</strong>
+                    <pre class="presentation-code">${escapeHtml([...processOutput, ...processErrors].join('\n'))}</pre>
+                </div>
+            ` : ''}
+        `;
+    }
+
+    function renderPresentation() {
+        const grid = document.getElementById('presentation-grid');
+        const emailInput = document.getElementById('presentation-email');
+        document.getElementById('presentation-meta').textContent =
+            `${presentationItems.length} test(s) • notifications ${presentationHistory.length ? 'tracées' : 'prêtes'}`;
+
+        if (!presentationItems.length) {
+            grid.innerHTML = '<div class="empty-state">Aucune batterie de tests disponible.</div>';
+            document.getElementById('presentation-detail').innerHTML = '<div class="empty-state">Aucun detail disponible.</div>';
+            return;
+        }
+
+        if (!presentationSelectedKey || !presentationItems.some(item => item.key === presentationSelectedKey)) {
+            presentationSelectedKey = presentationItems[0].key;
+        }
+
+        grid.innerHTML = presentationItems.map((item) => {
+            const lastRun = item.last_run;
+            const isActive = item.key === presentationSelectedKey;
+            const isRunning = presentationRunningKey === item.key;
+            return `
+                <article class="presentation-card ${isActive ? 'active' : ''}" onclick="selectPresentationTest('${escapeHtml(item.key)}')">
+                    <div class="factory-meta">
+                        <span class="status-pill cool">${escapeHtml(item.category)}</span>
+                        <span class="chip ${toneForPresentationStatus(lastRun?.status, lastRun?.passed)}">${lastRun ? escapeHtml(lastRun.status) : 'new'}</span>
+                    </div>
+                    <div>
+                        <h3>${escapeHtml(item.title)}</h3>
+                        <p>${escapeHtml(item.description)}</p>
+                    </div>
+                    <small>Attendu: ${escapeHtml(item.expected_outcome)}</small>
+                    <div class="factory-actions">
+                        <button class="btn-primary" type="button" onclick="event.stopPropagation(); runPresentationTest('${escapeHtml(item.key)}')" ${isRunning ? 'disabled' : ''}>${isRunning ? 'Execution...' : escapeHtml(item.action_label || 'Lancer')}</button>
+                        <span class="status-pill ${toneForPresentationStatus(lastRun?.status, lastRun?.passed)}">${lastRun ? formatDate(lastRun.timestamp) : 'Jamais lance'}</span>
+                    </div>
+                </article>
+            `;
+        }).join('');
+
+        if (emailInput && !emailInput.dataset.bound) {
+            const stored = window.localStorage.getItem('kivendtout.presentation.email');
+            if (stored && !emailInput.value) {
+                emailInput.value = stored;
+            }
+            emailInput.addEventListener('change', () => {
+                window.localStorage.setItem('kivendtout.presentation.email', emailInput.value.trim());
+            });
+            emailInput.dataset.bound = 'true';
+        }
+
+        renderPresentationDetail();
+    }
+
+    function selectPresentationTest(testKey) {
+        presentationSelectedKey = testKey;
+        renderPresentation();
+    }
+
+    async function loadPresentation() {
+        try {
+            const response = await fetch(`${API_URL}/api/presentation/tests?limit_history=12`, { cache: 'no-store' });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const payload = await response.json();
+            presentationItems = payload.items || [];
+            presentationHistory = payload.history || [];
+            renderPresentation();
+        } catch (error) {
+            console.error(error);
+            document.getElementById('presentation-grid').innerHTML = '<div class="empty-state">Impossible de charger la batterie de tests.</div>';
+            document.getElementById('presentation-detail').innerHTML = '<div class="empty-state">Le detail des tests est indisponible.</div>';
+            document.getElementById('presentation-meta').textContent = 'indisponible';
+        }
+    }
+
+    async function runPresentationTest(testKey) {
+        const email = (document.getElementById('presentation-email')?.value || '').trim();
+        presentationRunningKey = testKey;
+        presentationSelectedKey = testKey;
+        renderPresentation();
+        try {
+            const response = await fetch(`${API_URL}/api/presentation/tests/${encodeURIComponent(testKey)}/run`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ recipient_email: email || null })
+            });
+            const payload = await response.json();
+            if (!response.ok) {
+                const message = payload.detail?.message || payload.detail || `HTTP ${response.status}`;
+                throw new Error(typeof message === 'string' ? message : JSON.stringify(message));
+            }
+            await Promise.all([loadPresentation(), loadOverview(), loadFactory()]);
+        } catch (error) {
+            console.error(error);
+            alert(`Execution impossible: ${error.message}`);
+        } finally {
+            presentationRunningKey = null;
+            renderPresentation();
+        }
+    }
+
+    function renderFactory() {
+        const grid = document.getElementById('factory-grid');
+        const history = document.getElementById('factory-history');
+        document.getElementById('factory-meta').textContent = `${dataFactoryItems.length} action(s) disponibles`;
+
+        if (!dataFactoryItems.length) {
+            grid.innerHTML = '<div class="empty-state">Aucune action disponible.</div>';
+        } else {
+            grid.innerHTML = dataFactoryItems.map((item) => {
+                const lastRun = item.last_run;
+                return `
+                    <article class="factory-card">
+                        <div class="factory-meta">
+                            <span class="status-pill ${item.mode === 'live' ? 'warning' : 'cool'}">${escapeHtml(item.domain)}</span>
+                            <span class="chip ${lastRun ? toneForFactoryStatus(lastRun.status) : 'cool'}">${lastRun ? escapeHtml(lastRun.status) : 'new'}</span>
+                        </div>
+                        <div>
+                            <h3>${escapeHtml(item.title)}</h3>
+                            <p>${escapeHtml(item.description)}</p>
+                        </div>
+                        <p>${escapeHtml(item.impact)}</p>
+                        <div class="factory-actions">
+                            <button class="btn-primary" onclick="runFactoryAction('${escapeHtml(item.key)}')">${item.mode === 'live' ? 'Lancer 3 min' : 'Generer'}</button>
+                            <span class="status-pill ${lastRun ? toneForFactoryStatus(lastRun.status) : 'cool'}">${lastRun ? formatDate(lastRun.timestamp) : 'Jamais lance'}</span>
+                        </div>
+                    </article>
+                `;
+            }).join('');
+        }
+
+        if (!dataFactoryHistory.length) {
+            history.innerHTML = '<div class="empty-state">Aucune generation recente.</div>';
+        } else {
+            history.innerHTML = dataFactoryHistory.slice(0, 6).map((item) => `
+                <article class="factory-history-item">
+                    <strong>${escapeHtml(item.title)} • ${escapeHtml(item.status)}</strong>
+                    <p>${escapeHtml(item.message)}<br>${escapeHtml(formatDate(item.timestamp))}</p>
+                </article>
+            `).join('');
+        }
+    }
+
+    async function loadFactory() {
+        try {
+            const response = await fetch(`${API_URL}/api/data-factory?limit_history=12`, { cache: 'no-store' });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const payload = await response.json();
+            dataFactoryItems = payload.items || [];
+            dataFactoryHistory = payload.history || [];
+            renderFactory();
+        } catch (error) {
+            console.error(error);
+            document.getElementById('factory-grid').innerHTML = '<div class="empty-state">Impossible de charger la fabrique de donnees.</div>';
+            document.getElementById('factory-history').innerHTML = '';
+            document.getElementById('factory-meta').textContent = 'indisponible';
+        }
+    }
+
+    async function runFactoryAction(actionKey) {
+        try {
+            const response = await fetch(`${API_URL}/api/data-factory/${encodeURIComponent(actionKey)}/run`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            const payload = await response.json();
+            if (!response.ok) throw new Error(payload.detail || `HTTP ${response.status}`);
+            await Promise.all([loadFactory(), loadOverview()]);
+        } catch (error) {
+            console.error(error);
+            alert(`Generation impossible: ${error.message}`);
+        }
+    }
+
+    async function loadOverview() {
+        try {
+            const [healthResp, statsResp, checkoutResp, readableResp] = await Promise.all([
+                fetch(`${API_URL}/health`, { cache: 'no-store' }),
+                fetch(`${API_URL}/api/stats`, { cache: 'no-store' }),
+                fetch(`${API_URL}/api/checkout/stats?window_hours=24`, { cache: 'no-store' }),
+                fetch(`${API_URL}/api/kpis/readable?limit=100&micro_batch_window_hours=24`, { cache: 'no-store' })
+            ]);
+
+            const health = healthResp.ok ? await healthResp.json() : {};
+            const stats = statsResp.ok ? await statsResp.json() : {};
+            const checkout = checkoutResp.ok ? await checkoutResp.json() : {};
+            const readable = readableResp.ok ? await readableResp.json() : {};
+
+            const fraud = readable.fraud || {};
+            const fraudKpis = fraud.kpis || {};
+            const transfer = readable.transfer || {};
+            const transferKpis = transfer.kpis || {};
+
+            setPill('service-api', health.status === 'healthy' ? 'online' : 'offline', health.status === 'healthy' ? 'success' : 'danger');
+            setPill('service-checkout', `${checkout.total_attempts ?? 0} attempts`, 'cool');
+            setPill('service-transfer', transfer.micro_batch_status || 'n/a', readableTone(transfer.micro_batch_status || transfer.availability || 'cool'));
+
+            document.getElementById('overview-copy').textContent =
+                fraud.headline
+                    ? `${fraud.headline}. Snapshot: ${transferKpis.latest_snapshot_size_human || '-'} • micro-batch: ${transferKpis.micro_batch_total_events_window ?? 0} event(s).`
+                    : 'Les indicateurs consolidés ne sont pas encore disponibles.';
+
+            document.getElementById('overview-fraud-rate').textContent = `${fraudKpis.fraud_rate_percent ?? '-'}%`;
+            document.getElementById('overview-fraud-copy').textContent = fraud.headline || 'Taux de fraude indisponible.';
+
+            document.getElementById('overview-alerts').textContent = stats.total_alerts ?? 0;
+            document.getElementById('overview-alerts-copy').textContent =
+                `${stats.alerts_by_status?.PENDING_REVIEW ?? 0} en attente • ${stats.alerts_by_severity?.HIGH ?? 0} haute sévérité`;
+
+            document.getElementById('overview-underage').textContent = checkout.blocked_underage_orders ?? 0;
+            document.getElementById('overview-underage-copy').textContent =
+                `${checkout.accepted_orders ?? 0} commandes acceptées • rejet ${Number(checkout.rejection_rate ?? 0).toFixed(2)}%`;
+
+            document.getElementById('overview-transfer').textContent = `${transferKpis.micro_batch_total_events_window ?? 0}`;
+            document.getElementById('overview-transfer-copy').textContent =
+                `${transfer.headline || 'Pipeline de transfert'} • dernier snapshot ${transferKpis.latest_snapshot_size_human || '-'}`;
+
+            document.getElementById('module-fraud-status').textContent = `${fraud.risk_level || 'risque'} • ${fraudKpis.total_alerts ?? 0} alertes`;
+            document.getElementById('module-types-status').textContent = fraudKpis.top_reason || 'Aucune typologie dominante';
+            document.getElementById('module-identity-status').textContent = `${checkout.blocked_underage_orders ?? 0} blocages sur 24h`;
+            document.getElementById('module-transfer-status').textContent = transfer.headline || 'Statut transfert indisponible';
+            document.getElementById('module-use-cases-status').textContent = 'Commande mineur, identite, fraude';
+        } catch (error) {
+            console.error(error);
+            setPill('service-api', 'error', 'danger');
+            setPill('service-checkout', 'error', 'danger');
+            setPill('service-transfer', 'error', 'danger');
+            document.getElementById('overview-copy').textContent = 'Impossible de charger les indicateurs consolidés.';
+        }
+    }
+
+    async function refreshPage(reason = 'auto') {
+        await Promise.all([loadOverview(), loadFactory(), loadPresentation()]);
+        if (opsController) {
+            opsController.markRefresh(reason);
+        }
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+        if (window.KiDashboardOps) {
+            opsController = window.KiDashboardOps.attach({
+                apiUrl: API_URL,
+                onAfterReset: () => refreshPage('reset')
+            });
+        }
+        refreshPage('init');
+        setInterval(() => refreshPage('interval'), 1000);
+        if (window.KiLiveSync) {
+            window.KiLiveSync.attach({
+                apiUrl: API_URL,
+                onTick: () => refreshPage('live'),
+                onState: state => {
+                    if (opsController) {
+                        opsController.updateLiveState(state);
+                    }
+                },
+                refreshOnIdleEveryMs: 1000,
+                activeRefreshEveryMs: 1000,
+                minRefreshIntervalMs: 1000,
+                reconnectDelayMs: 1000,
+                fallbackEveryMs: 1000
+            });
+        }
+    });
+</script>
 </body>
 </html>

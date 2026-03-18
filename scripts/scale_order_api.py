@@ -35,7 +35,15 @@ def post_checkout(api_url, payload, timeout=15, headers=None):
     return requests.post(f"{api_url}/api/orders/checkout", json=payload, timeout=timeout, headers=headers or {})
 
 
-def build_payload(adult_products, non_adult_products, adult_cards, minor_cards, adult_order_ratio, minor_ratio):
+def build_payload(
+    adult_products,
+    non_adult_products,
+    adult_cards,
+    minor_cards,
+    adult_order_ratio,
+    minor_ratio,
+    risk_profile,
+):
     is_minor = random.random() < minor_ratio and len(minor_cards) > 0
     card = random.choice(minor_cards if is_minor else adult_cards)
 
@@ -45,6 +53,15 @@ def build_payload(adult_products, non_adult_products, adult_cards, minor_cards, 
     customer_id = f"C{random.randint(1, 2500):05d}"
     # Quantité fixée à 1 pour limiter les faux négatifs de charge liés aux ruptures de stock.
     quantity = 1
+    if risk_profile == "elevated":
+        payment_weights = [0.45, 0.3, 0.25]
+    else:
+        payment_weights = [0.72, 0.2, 0.08]
+    payment_method = random.choices(
+        ["card", "paypal", "bank_transfer"],
+        weights=payment_weights,
+        k=1,
+    )[0]
 
     payload = {
         "customer_id": customer_id,
@@ -55,14 +72,31 @@ def build_payload(adult_products, non_adult_products, adult_cards, minor_cards, 
                 "quantity": quantity
             }
         ],
-        "payment_method": "card"
+        "payment_method": payment_method,
+        "risk_profile": risk_profile,
     }
     return payload, is_minor, wants_adult
 
 
-def run_request(api_url, adult_products, non_adult_products, adult_cards, minor_cards, adult_order_ratio, minor_ratio, headers):
+def run_request(
+    api_url,
+    adult_products,
+    non_adult_products,
+    adult_cards,
+    minor_cards,
+    adult_order_ratio,
+    minor_ratio,
+    risk_profile,
+    headers,
+):
     payload, is_minor, wants_adult = build_payload(
-        adult_products, non_adult_products, adult_cards, minor_cards, adult_order_ratio, minor_ratio
+        adult_products,
+        non_adult_products,
+        adult_cards,
+        minor_cards,
+        adult_order_ratio,
+        minor_ratio,
+        risk_profile,
     )
     started = time.perf_counter()
     try:
@@ -172,6 +206,7 @@ def run_burst_mode(args, adult_products, non_adult_products, adult_cards, minor_
                 minor_cards,
                 args.adult_order_ratio,
                 args.minor_ratio,
+                args.risk_profile,
                 headers
             )
             for _ in range(args.requests)
@@ -209,6 +244,7 @@ def run_realtime_mode(args, adult_products, non_adult_products, adult_cards, min
                     minor_cards,
                     args.adult_order_ratio,
                     args.minor_ratio,
+                    args.risk_profile,
                     headers
                 )
                 for _ in range(rps)
@@ -254,6 +290,12 @@ def main():
     )
     parser.add_argument("--duration-seconds", type=int, default=30, help="Durée en secondes en mode realtime")
     parser.add_argument("--rps", type=int, default=8, help="Requêtes par seconde en mode realtime")
+    parser.add_argument(
+        "--risk-profile",
+        choices=["standard", "elevated"],
+        default="standard",
+        help="Profil de risque paiements injecte dans le checkout",
+    )
     args = parser.parse_args()
 
     headers = build_api_headers()

@@ -79,7 +79,7 @@ CREATE TABLE orders (
     customer_id VARCHAR(50) NOT NULL REFERENCES customers(customer_id),
     order_date TIMESTAMP NOT NULL,
     total_amount NUMERIC(10, 2) NOT NULL CHECK (total_amount >= 0),
-    status VARCHAR(50) CHECK (status IN ('pending', 'paid', 'cancelled', 'processing', 'shipped')),
+    status VARCHAR(50) CHECK (status IN ('pending', 'paid', 'cancelled', 'processing', 'shipped', 'manual_review')),
     shipping_address_id INTEGER REFERENCES addresses(address_id),
     billing_address_id INTEGER REFERENCES addresses(address_id),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP

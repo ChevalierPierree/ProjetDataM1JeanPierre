@@ -39,6 +39,16 @@ while IFS= read -r -d '' runtime_file; do
   remove_path "$runtime_file"
 done < <(find "$ROOT_DIR/logs" -maxdepth 1 -type f \( -name "*.log" -o -name "*.pid" \) -print0 2>/dev/null || true)
 
+# Runtime histories and previews.
+remove_path "$ROOT_DIR/logs/alert_notification_history.jsonl"
+remove_path "$ROOT_DIR/logs/use_case_history.jsonl"
+remove_path "$ROOT_DIR/logs/data_factory_history.jsonl"
+remove_path "$ROOT_DIR/logs/presentation_test_history.jsonl"
+remove_path "$ROOT_DIR/logs/alert_email_preview"
+remove_path "$ROOT_DIR/logs/micro_batch_state.json"
+remove_path "$ROOT_DIR/data/external"
+remove_path "$ROOT_DIR/delivery_pack"
+
 # Keep only the newest N data lake snapshots.
 snapshots=()
 while IFS= read -r snapshot_path; do

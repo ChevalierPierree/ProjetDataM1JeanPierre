@@ -19,7 +19,7 @@ Etat avant:
 
 Risque:
 - non-conformité métier (mineur pouvant commander Adult),
-- difficulté à démontrer la scalabilité API en soutenance.
+- difficulte a demontrer la scalabilite API en presentation projet.
 
 ## 3) Correctifs livrés
 

@@ -15,7 +15,7 @@ import time
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Dict, Iterable, List
+from typing import Dict, Iterable, List, Optional, Tuple
 
 import psycopg2
 from pymongo import MongoClient
@@ -107,6 +107,73 @@ def save_state(state_file: Path, watermark: datetime) -> None:
     state_file.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
+def _coerce_event_ts(value) -> Optional[datetime]:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        ts = value
+    else:
+        ts = parse_iso8601(str(value))
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=timezone.utc)
+    return ts.astimezone(timezone.utc)
+
+
+def fetch_event_bounds() -> Tuple[Optional[datetime], Optional[datetime]]:
+    client = mongo_client()
+    try:
+        db = client[os.getenv("MONGODB_DB", "kivendtout")]
+        coll = db[os.getenv("MONGODB_COLLECTION", "events")]
+        first = next(iter(coll.find({}, {"ts": 1, "_id": 0}).sort("ts", 1).limit(1)), None)
+        last = next(iter(coll.find({}, {"ts": 1, "_id": 0}).sort("ts", -1).limit(1)), None)
+        return _coerce_event_ts((first or {}).get("ts")), _coerce_event_ts((last or {}).get("ts"))
+    finally:
+        client.close()
+
+
+def resolve_initial_watermark(
+    state_file: Path,
+    bootstrap_minutes: int,
+    watermark_utc: str | None,
+    window_seconds: int,
+    anchor_mode: str,
+) -> Tuple[datetime, dict]:
+    source_min_ts, source_max_ts = fetch_event_bounds()
+    metadata = {
+        "anchor_mode": anchor_mode,
+        "source_min_ts_utc": to_iso8601(source_min_ts) if source_min_ts else None,
+        "source_max_ts_utc": to_iso8601(source_max_ts) if source_max_ts else None,
+        "watermark_origin": "state",
+        "watermark_adjusted": False,
+    }
+
+    if watermark_utc:
+        watermark = parse_iso8601(watermark_utc)
+        metadata["watermark_origin"] = "override"
+    else:
+        watermark = load_state(state_file, bootstrap_minutes=bootstrap_minutes)
+
+    if not source_max_ts:
+        return watermark, metadata
+
+    latest_window_start = source_max_ts - timedelta(seconds=max(1, window_seconds))
+
+    if anchor_mode == "latest-data":
+        watermark = latest_window_start
+        metadata["watermark_origin"] = "latest-data"
+        metadata["watermark_adjusted"] = True
+        return watermark, metadata
+
+    if anchor_mode == "auto":
+        if watermark >= source_max_ts or watermark < (source_min_ts or watermark):
+            watermark = latest_window_start
+            metadata["watermark_origin"] = "auto-latest-data"
+            metadata["watermark_adjusted"] = True
+        return watermark, metadata
+
+    return watermark, metadata
+
+
 def fetch_batch_events(start_dt: datetime, end_dt: datetime) -> List[Dict]:
     start_iso = to_iso8601(start_dt)
     end_iso = to_iso8601(end_dt)
@@ -180,6 +247,9 @@ def append_transfer_kpi(
     events_count: int,
     latency_ms: float,
     speed_events_per_sec: float,
+    event_types_count: int,
+    anchor_mode: str,
+    source_max_ts: Optional[datetime],
 ) -> None:
     payload = {
         "metric": "micro_batch_events",
@@ -189,6 +259,9 @@ def append_transfer_kpi(
         "latency_ms": round(float(latency_ms), 2),
         "capacity_events": int(events_count),
         "speed_events_per_second": round(float(speed_events_per_sec), 2),
+        "event_types_count": int(event_types_count),
+        "anchor_mode": anchor_mode,
+        "source_max_ts_utc": to_iso8601(source_max_ts) if source_max_ts else None,
     }
     TRANSFER_KPI_HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
     with TRANSFER_KPI_HISTORY_FILE.open("a", encoding="utf-8") as fh:
@@ -203,12 +276,16 @@ def run_micro_batch(
     bootstrap_minutes: int,
     state_file: Path,
     watermark_utc: str | None,
+    anchor_mode: str,
 ) -> int:
     ensure_micro_batch_table()
-    if watermark_utc:
-        watermark = parse_iso8601(watermark_utc)
-    else:
-        watermark = load_state(state_file, bootstrap_minutes=bootstrap_minutes)
+    watermark, source_meta = resolve_initial_watermark(
+        state_file=state_file,
+        bootstrap_minutes=bootstrap_minutes,
+        watermark_utc=watermark_utc,
+        window_seconds=window_seconds,
+        anchor_mode=anchor_mode,
+    )
     started_at = time.time()
     batches_done = 0
 
@@ -217,6 +294,9 @@ def run_micro_batch(
     print(f"poll_interval    : {poll_interval}")
     print(f"duration_seconds : {duration_seconds if duration_seconds > 0 else 'infinite'}")
     print(f"state_file       : {state_file}")
+    print(f"anchor_mode      : {anchor_mode}")
+    if source_meta.get("source_max_ts_utc"):
+        print(f"source_max_ts    : {source_meta['source_max_ts_utc']}")
     print(f"initial_watermark: {to_iso8601(watermark)}")
 
     while True:
@@ -230,25 +310,32 @@ def run_micro_batch(
             time.sleep(poll_interval)
             continue
 
+        process_started_at = time.perf_counter()
         events = fetch_batch_events(batch_start, batch_end)
         counters = Counter((item.get("event_type") or "unknown").strip() or "unknown" for item in events)
         total_events = sum(counters.values())
-        latency_ms = max(0.0, (datetime.now(timezone.utc) - batch_end).total_seconds() * 1000.0)
-        speed_events_per_sec = float(total_events) / float(window_seconds) if window_seconds > 0 else 0.0
+        processing_latency_ms = max(1.0, (time.perf_counter() - process_started_at) * 1000.0)
+        speed_events_per_sec = float(total_events) / (processing_latency_ms / 1000.0) if processing_latency_ms > 0 else 0.0
+        event_types_count = len([event_type for event_type, count in counters.items() if event_type != "NO_EVENTS" and count > 0])
+        _, source_max_ts = fetch_event_bounds() if run_once else (None, source_meta.get("source_max_ts_utc"))
+        source_max_dt = source_max_ts if isinstance(source_max_ts, datetime) else _coerce_event_ts(source_max_ts)
 
         persist_batch_metrics(
             start_dt=batch_start,
             end_dt=batch_end,
             counters=counters,
-            latency_ms=latency_ms,
+            latency_ms=processing_latency_ms,
             speed_events_per_sec=speed_events_per_sec,
         )
         append_transfer_kpi(
             start_dt=batch_start,
             end_dt=batch_end,
             events_count=total_events,
-            latency_ms=latency_ms,
+            latency_ms=processing_latency_ms,
             speed_events_per_sec=speed_events_per_sec,
+            event_types_count=event_types_count,
+            anchor_mode=anchor_mode,
+            source_max_ts=source_max_dt,
         )
 
         watermark = batch_end
@@ -259,7 +346,7 @@ def run_micro_batch(
             f"[batch {batches_done:04d}] "
             f"window={to_iso8601(batch_start)}->{to_iso8601(batch_end)} "
             f"events={total_events} types={len(counters)} "
-            f"latency_ms={latency_ms:.2f} speed_events_per_sec={speed_events_per_sec:.2f}"
+            f"processing_latency_ms={processing_latency_ms:.2f} speed_events_per_sec={speed_events_per_sec:.2f}"
         )
 
         if run_once:
@@ -278,6 +365,12 @@ def main() -> int:
     parser.add_argument("--bootstrap-minutes", type=int, default=10, help="Watermark initial si état absent")
     parser.add_argument("--state-file", default=str(DEFAULT_STATE_FILE), help="Fichier watermark JSON")
     parser.add_argument("--watermark-utc", default=None, help="Override watermark initial (ISO8601)")
+    parser.add_argument(
+        "--anchor-mode",
+        default=os.getenv("MICRO_BATCH_ANCHOR_MODE", "auto"),
+        choices=["auto", "state", "latest-data"],
+        help="Mode d'ancrage du watermark: auto, state, latest-data",
+    )
     args = parser.parse_args()
 
     return run_micro_batch(
@@ -288,6 +381,7 @@ def main() -> int:
         bootstrap_minutes=max(1, int(args.bootstrap_minutes)),
         state_file=Path(args.state_file).resolve(),
         watermark_utc=args.watermark_utc,
+        anchor_mode=str(args.anchor_mode),
     )
 
 
