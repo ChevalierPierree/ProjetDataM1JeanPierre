@@ -1,9 +1,9 @@
 {
-  "generated_at": "2026-03-18T10:42:00.523566+00:00",
+  "generated_at": "2026-03-18T14:30:24.690547+00:00",
   "api_url": "http://localhost:8000",
   "summary": {
-    "total": 6,
-    "passed": 6,
+    "total": 7,
+    "passed": 7,
     "failed": 0,
     "success_rate_percent": 100.0,
     "global_status": "PASS"
@@ -38,14 +38,14 @@
         "promotion_stdout_tail": "",
         "promotion_stderr_tail": "",
         "promotion_report": {
-          "generated_at": "2026-03-18T10:41:34.717106+00:00",
-          "source_manifest_file": "/Users/jeanmacario/Documents/GitHub/ProjetDataM1JeanPierre/logs/data_lake_snapshot_20260318T104117Z.json",
-          "source_snapshot_utc": "20260318T104117Z",
+          "generated_at": "2026-03-18T14:30:02.150378+00:00",
+          "source_manifest_file": "/Users/jeanmacario/Documents/GitHub/ProjetDataM1JeanPierre/logs/data_lake_snapshot_20260318T142946Z.json",
+          "source_snapshot_utc": "20260318T142946Z",
           "minio_target": "https://localhost:9000",
           "layers": {
             "bronze": {
               "bucket": "bronze",
-              "snapshot_prefix": "bronze/raw_snapshot/20260318T104117Z",
+              "snapshot_prefix": "bronze/raw_snapshot/20260318T142946Z",
               "uploaded_files": 77,
               "total_bytes": 30602845
             },
@@ -54,16 +54,16 @@
               "status": "published",
               "objects": [
                 {
-                  "object_path": "silver/normalized_snapshot/20260318T104117Z/normalized_manifest.json",
+                  "object_path": "silver/normalized_snapshot/20260318T142946Z/normalized_manifest.json",
                   "size_bytes": 34265,
-                  "latency_seconds": 0.192,
-                  "speed_bytes_per_second": 178493.1
+                  "latency_seconds": 0.139,
+                  "speed_bytes_per_second": 246050.99
                 },
                 {
                   "object_path": "silver/normalized_snapshot/latest.json",
                   "size_bytes": 34265,
-                  "latency_seconds": 0.179,
-                  "speed_bytes_per_second": 191599.41
+                  "latency_seconds": 0.169,
+                  "speed_bytes_per_second": 203056.11
                 }
               ],
               "summary": {
@@ -162,34 +162,34 @@
               "status": "published",
               "objects": [
                 {
-                  "object_path": "gold/business_kpis/20260318T104117Z/fraud_operational_kpis.json",
-                  "size_bytes": 2420,
-                  "latency_seconds": 0.16,
-                  "speed_bytes_per_second": 15127.8
+                  "object_path": "gold/business_kpis/20260318T142946Z/fraud_operational_kpis.json",
+                  "size_bytes": 2421,
+                  "latency_seconds": 0.149,
+                  "speed_bytes_per_second": 16294.5
                 },
                 {
                   "object_path": "gold/business_kpis/latest.json",
-                  "size_bytes": 2420,
-                  "latency_seconds": 0.163,
-                  "speed_bytes_per_second": 14818.68
+                  "size_bytes": 2421,
+                  "latency_seconds": 0.151,
+                  "speed_bytes_per_second": 16025.05
                 }
               ],
               "business_kpis": {
-                "successful_payments": 3358,
-                "fraudulent_payments": 139,
-                "fraud_rate_percent": 4.14,
-                "total_alerts": 4505,
-                "checkout_attempts": 2903,
-                "blocked_underage_orders": 352,
-                "blocked_underage_rate_percent": 12.13,
-                "identity_verifications": 2970,
-                "orders_total": 3840,
-                "orders_manual_review": 238,
+                "successful_payments": 2155,
+                "fraudulent_payments": 224,
+                "fraud_rate_percent": 10.39,
+                "total_alerts": 2200,
+                "checkout_attempts": 1514,
+                "blocked_underage_orders": 412,
+                "blocked_underage_rate_percent": 27.21,
+                "identity_verifications": 1576,
+                "orders_total": 2391,
+                "orders_manual_review": 524,
                 "events_total": 71694
               }
             }
           },
-          "report_file": "/Users/jeanmacario/Documents/GitHub/ProjetDataM1JeanPierre/logs/data_lake_promotion_20260318T104134Z.json"
+          "report_file": "/Users/jeanmacario/Documents/GitHub/ProjetDataM1JeanPierre/logs/data_lake_promotion_20260318T143002Z.json"
         },
         "policy_files": [
           "/Users/jeanmacario/Documents/GitHub/ProjetDataM1JeanPierre/security/minio/policies/bronze-writer.json",
@@ -204,16 +204,45 @@
       "details": {
         "exit_code": 0,
         "api_summary": {
-          "rows": 6,
-          "windows": 2,
-          "active_windows": 2,
-          "total_events": 6,
-          "avg_latency_ms": 8.94,
-          "avg_speed_events_per_sec": 305.8,
+          "rows": 1,
+          "windows": 1,
+          "active_windows": 1,
+          "total_events": 1,
+          "avg_latency_ms": 11.36,
+          "avg_speed_events_per_sec": 88.01,
           "latest_batch_ended_at": "2026-01-01T00:11:19.292000",
-          "latest_processed_at": "2026-03-18T10:41:58.543506"
+          "latest_processed_at": "2026-03-18T14:30:22.165030"
         },
-        "stdout_tail": "hor_mode      : auto\nsource_max_ts    : 2026-01-01T00:11:19.292000Z\ninitial_watermark: 2026-01-01T00:10:49.292000Z\n[batch 0001] window=2026-01-01T00:10:49.292000Z->2026-01-01T00:11:19.292000Z events=1 types=1 processing_latency_ms=7.38 speed_events_per_sec=135.53\nMicro-batch termin\u00e9. batches_done=1\n",
+        "stdout_tail": "hor_mode      : auto\nsource_max_ts    : 2026-01-01T00:11:19.292000Z\ninitial_watermark: 2026-01-01T00:10:49.292000Z\n[batch 0001] window=2026-01-01T00:10:49.292000Z->2026-01-01T00:11:19.292000Z events=1 types=1 processing_latency_ms=11.36 speed_events_per_sec=88.01\nMicro-batch termin\u00e9. batches_done=1\n",
+        "stderr_tail": ""
+      }
+    },
+    {
+      "item": "analytics_warehouse",
+      "status": "PASS",
+      "details": {
+        "exit_code": 0,
+        "schema": "analytics",
+        "dimensions": {
+          "dim_date": 62,
+          "dim_customer": 2500,
+          "dim_product": 200
+        },
+        "facts": {
+          "fact_order": 2425,
+          "fact_payment": 2429,
+          "fact_identity_verification": 1618,
+          "fact_checkout_attempt": 1556,
+          "fact_fraud_alert": 2211
+        },
+        "datamarts": {
+          "mart_fraud_daily": 62,
+          "mart_identity_controls_daily": 62,
+          "mart_checkout_risk_daily": 62,
+          "mart_product_sales_daily": 2539
+        },
+        "report_file": "/Users/jeanmacario/Documents/GitHub/ProjetDataM1JeanPierre/logs/analytics_warehouse_report.json",
+        "stdout_tail": "=== ANALYTICS WAREHOUSE BUILD ===\nSchema       : analytics\nDimensions   : 2762\nFacts        : 10239\nDatamarts    : 2725\nChecks       : 9/9 PASS\nReport       : /Users/jeanmacario/Documents/GitHub/ProjetDataM1JeanPierre/logs/analytics_warehouse_report.json\n",
         "stderr_tail": ""
       }
     },
@@ -240,17 +269,17 @@
       "item": "transfer_kpi_dashboard_data",
       "status": "PASS",
       "details": {
-        "points": 45,
+        "points": 43,
         "metrics_count": {
-          "micro_batch_events": 12,
-          "data_lake_snapshot": 13,
-          "data_lake_silver": 10,
-          "data_lake_gold": 10
+          "data_lake_snapshot": 17,
+          "data_lake_silver": 6,
+          "data_lake_gold": 6,
+          "micro_batch_events": 14
         },
         "summary": {
           "health_score": 100,
           "monitored_flows": 4,
-          "active_micro_batch_windows": 12,
+          "active_micro_batch_windows": 14,
           "latest_snapshot_size_human": "77 fichiers | 29.19 MB",
           "latest_micro_batch_volume_human": "1 evt | 1 type(s)"
         }

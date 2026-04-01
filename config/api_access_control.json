@@ -30,6 +30,7 @@
       "POST:/api/micro-batch/*",
       "GET:/api/transfer/*",
       "GET:/api/data-lake/*",
+      "GET:/api/data-platform/*",
       "GET:/api/kpis/*",
       "GET:/api/system/*",
       "GET:/api/live/*"

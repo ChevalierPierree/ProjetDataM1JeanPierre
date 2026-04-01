@@ -3,25 +3,25 @@
     --font-display: "Avenir Next", "Segoe UI", "Gill Sans", sans-serif;
     --font-mono: "SFMono-Regular", Consolas, monospace;
 
-    --ink-950: #163047;
-    --ink-900: #1e4362;
-    --ink-760: #4d657c;
-    --ink-640: #688095;
-    --bg-page: #eef3f8;
-    --bg-page-alt: #f7f9fc;
+    --ink-950: #1b2d3d;
+    --ink-900: #2a4256;
+    --ink-760: #607587;
+    --ink-640: #7a8d9d;
+    --bg-page: #f3f6f9;
+    --bg-page-alt: #edf2f6;
     --card: #ffffff;
-    --card-soft: #f8fafc;
-    --border: #d9e2ec;
-    --border-strong: #c6d4e1;
-    --accent: #1f4f82;
-    --accent-deep: #163c63;
-    --teal: #0f7c82;
-    --teal-deep: #0a5c61;
-    --accent-cool: #0f7c82;
-    --gold: #bf8a2b;
-    --success: #1f8a62;
-    --warning: #c48822;
-    --danger: #c24f55;
+    --card-soft: #f7f9fb;
+    --border: #d7e0e8;
+    --border-strong: #c4d1dc;
+    --accent: #1f5b8f;
+    --accent-deep: #17466f;
+    --teal: #2f7d61;
+    --teal-deep: #255f4a;
+    --accent-cool: #5b7f9b;
+    --gold: #b27a22;
+    --success: #2f7d61;
+    --warning: #c2872a;
+    --danger: #c45454;
     --shadow-xl: 0 24px 60px rgba(15, 37, 55, 0.12);
     --shadow-lg: 0 18px 40px rgba(15, 37, 55, 0.1);
     --shadow-md: 0 12px 28px rgba(15, 37, 55, 0.08);
@@ -47,23 +47,12 @@ body {
     padding: 28px;
     color: var(--ink-950);
     font-family: var(--font-ui);
-    background:
-        radial-gradient(circle at top left, rgba(31, 79, 130, 0.08), transparent 28%),
-        radial-gradient(circle at bottom right, rgba(15, 124, 130, 0.08), transparent 24%),
-        linear-gradient(180deg, var(--bg-page) 0%, var(--bg-page-alt) 100%);
+    background: linear-gradient(180deg, var(--bg-page) 0%, var(--bg-page-alt) 100%);
     background-attachment: fixed;
 }
 
 body::before {
-    content: "";
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-    background-image:
-        linear-gradient(rgba(30, 67, 98, 0.03) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(30, 67, 98, 0.03) 1px, transparent 1px);
-    background-size: 88px 88px;
-    mask-image: radial-gradient(circle at center, black 40%, transparent 88%);
+    display: none;
 }
 
 .layout {
@@ -277,7 +266,7 @@ body::before {
 }
 
 .metric-card.cool {
-    background: linear-gradient(135deg, var(--teal) 0%, var(--teal-deep) 100%);
+    background: linear-gradient(135deg, var(--accent-cool) 0%, var(--accent) 100%);
 }
 
 .metric-card.gold {
@@ -524,7 +513,7 @@ button:focus-visible {
 .status-pill.cool,
 .chip.cool {
     color: #fff;
-    background: linear-gradient(135deg, var(--teal) 0%, var(--teal-deep) 100%);
+    background: linear-gradient(135deg, var(--accent-cool) 0%, var(--accent) 100%);
 }
 
 .table-shell {
@@ -663,7 +652,7 @@ button[disabled] {
 .progress-value {
     height: 100%;
     border-radius: 999px;
-    background: linear-gradient(90deg, var(--accent) 0%, var(--teal) 100%);
+    background: linear-gradient(90deg, var(--accent) 0%, var(--accent-cool) 100%);
 }
 
 .two-col {
@@ -779,7 +768,7 @@ button[disabled] {
 }
 
 .sparkline-line.cool {
-    stroke: var(--teal);
+    stroke: var(--accent-cool);
 }
 
 .sparkline-line.gold {
@@ -787,7 +776,7 @@ button[disabled] {
 }
 
 .sparkline-area.cool {
-    fill: rgba(15, 124, 130, 0.12);
+    fill: rgba(91, 127, 155, 0.16);
 }
 
 .sparkline-area.gold {
@@ -801,7 +790,7 @@ button[disabled] {
 }
 
 .sparkline-point.cool {
-    stroke: var(--teal);
+    stroke: var(--accent-cool);
 }
 
 .sparkline-point.gold {
@@ -856,7 +845,7 @@ button[disabled] {
 .bar-fill {
     height: 100%;
     border-radius: 999px;
-    background: linear-gradient(90deg, var(--accent) 0%, var(--teal) 100%);
+    background: linear-gradient(90deg, var(--accent) 0%, var(--accent-cool) 100%);
 }
 
 .bar-fill.gold {
@@ -890,7 +879,7 @@ button[disabled] {
 }
 
 .stacked-segment.low {
-    background: linear-gradient(90deg, var(--teal) 0%, var(--teal-deep) 100%);
+    background: linear-gradient(90deg, var(--success) 0%, var(--teal-deep) 100%);
 }
 
 .legend-row,
@@ -930,7 +919,7 @@ button[disabled] {
 }
 
 .legend-dot.low {
-    background: var(--teal);
+    background: var(--success);
 }
 
 .heatmap {
@@ -1112,7 +1101,7 @@ button[disabled] {
     margin: 14px 0 16px;
     padding: 14px;
     border-radius: 18px;
-    background: linear-gradient(180deg, rgba(31, 79, 130, 0.05) 0%, rgba(15, 124, 130, 0.04) 100%);
+    background: linear-gradient(180deg, rgba(31, 79, 130, 0.05) 0%, rgba(91, 127, 155, 0.05) 100%);
     border: 1px solid rgba(31, 79, 130, 0.08);
 }
 
@@ -1139,8 +1128,8 @@ button[disabled] {
 .emphasis-note {
     padding: 14px 16px;
     border-radius: 16px;
-    background: rgba(15, 124, 130, 0.08);
-    border: 1px solid rgba(15, 124, 130, 0.12);
+    background: rgba(31, 79, 130, 0.08);
+    border: 1px solid rgba(31, 79, 130, 0.12);
     color: var(--ink-900);
     line-height: 1.55;
 }

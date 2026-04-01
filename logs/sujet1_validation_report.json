@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-03-18T10:41:57.406082+00:00",
+  "generated_at": "2026-03-18T14:30:21.136088+00:00",
   "api_url": "http://localhost:8000",
   "summary": {
     "requirements_total": 11,
@@ -15,7 +15,7 @@
       "status": "PASS",
       "details": {
         "customers": 2500,
-        "orders": 3855,
+        "orders": 2391,
         "orphan_orders": 0
       }
     },
@@ -34,7 +34,7 @@
       "status": "PASS",
       "details": {
         "exit_code": 0,
-        "manifest_file": "/Users/jeanmacario/Documents/GitHub/ProjetDataM1JeanPierre/logs/data_lake_snapshot_20260318T104137Z.json",
+        "manifest_file": "/Users/jeanmacario/Documents/GitHub/ProjetDataM1JeanPierre/logs/data_lake_snapshot_20260318T143005Z.json",
         "stderr_tail": ""
       }
     },
@@ -65,9 +65,9 @@
       "status": "PASS",
       "details": {
         "attempts": 15,
-        "avg_ms": 41.57,
-        "p95_ms": 51.17,
-        "max_ms": 113.54
+        "avg_ms": 14.69,
+        "p95_ms": 15.22,
+        "max_ms": 15.28
       }
     },
     {
@@ -79,7 +79,7 @@
         "http_errors": 0,
         "network_errors": 0,
         "minor_adult_accepted": 0,
-        "p95_ms": 489.4,
+        "p95_ms": 220.3,
         "stderr_tail": ""
       }
     },
@@ -121,10 +121,10 @@
         "model_accuracy_percent": 100.0,
         "minor_checkout_status": 403,
         "adult_checkout_status": 200,
-        "selected_adult_product_id": 59,
-        "selected_adult_product_name": "Product 0059",
-        "selected_adult_product_stock": 50,
-        "adult_products_available": 21,
+        "selected_adult_product_id": 78,
+        "selected_adult_product_name": "Product 0078",
+        "selected_adult_product_stock": 74,
+        "adult_products_available": 22,
         "model_stderr_tail": ""
       }
     }

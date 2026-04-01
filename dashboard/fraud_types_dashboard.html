@@ -56,7 +56,6 @@
         <a class="active" href="fraud_types_dashboard.html">Typologies</a>
         <a href="id_cards_dashboard.html">Identite</a>
         <a href="transfer_kpi_dashboard.html">Transferts</a>
-        <a href="use_cases_dashboard.html">Use cases</a>
     </nav>
 
     <section class="masthead">
@@ -100,7 +99,7 @@
                 Typologie
                 <select id="reason-select"></select>
             </label>
-            <button class="btn-primary" onclick="refreshRuntime()">Rafraichir les flux</button>
+            <button class="btn-primary" onclick="refreshAll()">Actualiser</button>
         </div>
     </div>
 
@@ -229,23 +228,6 @@
         el.textContent = `Runtime: ${message}`;
         el.className = 'status-pill';
         el.classList.add(isError ? 'danger' : 'cool');
-    }
-
-    function sleep(ms) {
-        return new Promise(resolve => setTimeout(resolve, ms));
-    }
-
-    async function waitForApiReady(maxSeconds = 30) {
-        for (let i = 0; i < maxSeconds; i++) {
-            try {
-                const resp = await fetch(`${API_URL}/health`, { cache: 'no-store' });
-                if (resp.ok) return true;
-            } catch (error) {
-                // API potentiellement en redemarrage
-            }
-            await sleep(1000);
-        }
-        return false;
     }
 
     function translateReason(reason) {
@@ -389,7 +371,7 @@
         if (!value) return 'rgba(223, 232, 240, 0.55)';
         if (tone === 'HIGH') return `rgba(203, 90, 97, ${0.16 + ratio * 0.68})`;
         if (tone === 'MEDIUM') return `rgba(208, 148, 46, ${0.16 + ratio * 0.65})`;
-        return `rgba(15, 124, 130, ${0.16 + ratio * 0.68})`;
+        return `rgba(47, 125, 97, ${0.16 + ratio * 0.68})`;
     }
 
     function renderSplitBar(targetId, counts, total) {
@@ -727,47 +709,6 @@
         }
     }
 
-    async function refreshRuntime() {
-        try {
-            setRuntimeStatus('refresh en cours...');
-            const response = await fetch(`${API_URL}/api/runtime/refresh`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    sync_kafka: true,
-                    run_scaling: true,
-                    run_alert_scaling: true,
-                    restart_api: true,
-                    scaling_mode: 'realtime',
-                    requests: 120,
-                    concurrency: 12,
-                    duration_seconds: 30,
-                    rps: 8,
-                    alerts_mode: 'realtime',
-                    alerts_requests: 180,
-                    alerts_concurrency: 10,
-                    alerts_duration_seconds: 30,
-                    alerts_rps: 6,
-                    high_severity_ratio: 0.35,
-                    adult_order_ratio: 0.6,
-                    minor_ratio: 0.4
-                })
-            });
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        } catch (error) {
-            console.warn('Refresh runtime: interruption attendue si API restart', error);
-        }
-
-        const ready = await waitForApiReady(35);
-        if (!ready) {
-            setRuntimeStatus('API non joignable apres refresh', true);
-            return;
-        }
-
-        setRuntimeStatus('API relancee');
-        await refreshAll();
-    }
-
     document.getElementById('reason-select').addEventListener('change', event => {
         selectedReason = event.target.value;
         renderHeatmap(currentReasonRows);
@@ -785,7 +726,6 @@
         }
         setRuntimeStatus('idle');
         refreshAll();
-        setInterval(refreshAll, 1000);
         if (window.KiLiveSync) {
             window.KiLiveSync.attach({
                 apiUrl: API_URL,

@@ -192,6 +192,25 @@ class IdCardPreview(BaseModel):
     age: int
     is_adult: bool
 
+class IdCardAnalysis(BaseModel):
+    file: str
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    sex: Optional[str] = None
+    birthdate: str
+    age: int
+    is_adult: bool
+    doc_number: Optional[str] = None
+    expiry: Optional[str] = None
+    expired: bool
+    image_url: str
+    image_sha256: str
+    backend_analysis_source: str
+    fingerprint_birthdate: Optional[str] = None
+    fingerprint_match: bool
+    model_enabled: bool
+    model_version: Optional[str] = None
+
 class OrderItemRequest(BaseModel):
     product_id: int
     quantity: int = Field(default=1, ge=1)
@@ -392,12 +411,15 @@ DATASET_DIR = Path(__file__).resolve().parent.parent / "kivendtout_dataset"
 ID_CARDS_DIR = DATASET_DIR / "synthetic_id_cards"
 ID_LABELS_FILE = DATASET_DIR / "synthetic_id_labels.csv"
 ID_LABELS_CACHE = None
+ID_LABEL_RECORDS_CACHE = None
 BASE_DIR = Path(__file__).resolve().parent.parent
 ID_FINGERPRINT_MODEL_FILE = BASE_DIR / "models" / "id_card_fingerprint_model.json"
 ID_FINGERPRINT_MODEL_CACHE = None
 RUNTIME_LOG_FILE = BASE_DIR / "logs" / "runtime_refresh.log"
 MICRO_BATCH_RUN_LOG_FILE = BASE_DIR / "logs" / "micro_batch_run.log"
 TRANSFER_KPI_HISTORY_FILE = BASE_DIR / "logs" / "transfer_kpi_history.jsonl"
+ANALYTICS_WAREHOUSE_REPORT_FILE = BASE_DIR / "logs" / "analytics_warehouse_report.json"
+DATA_PLATFORM_PIPELINE_REPORT_FILE = BASE_DIR / "logs" / "data_platform_pipeline_report.json"
 ALERT_NOTIFICATION_CONFIG_FILE = BASE_DIR / "config" / "alert_notification_settings.json"
 ALERT_NOTIFICATION_HISTORY_FILE = BASE_DIR / "logs" / "alert_notification_history.jsonl"
 ALERT_NOTIFICATION_PREVIEW_DIR = BASE_DIR / "logs" / "alert_email_preview"
@@ -407,6 +429,7 @@ PRESENTATION_TEST_HISTORY_FILE = BASE_DIR / "logs" / "presentation_test_history.
 DATA_RESET_LOG_FILE = BASE_DIR / "logs" / "data_reset.log"
 RESET_SCHEMA_SQL_FILE = BASE_DIR / "database" / "postgres" / "init" / "00_reset_schema.sql"
 DATA_LAKE_PROMOTION_REPORT_GLOB = "data_lake_promotion_*.json"
+DATA_LAKE_SNAPSHOT_REPORT_GLOB = "data_lake_snapshot_*.json"
 LIVE_STREAM_HEARTBEAT_SECONDS = float(os.getenv("LIVE_STREAM_HEARTBEAT_SECONDS", "1.0"))
 RUNTIME_REFRESH_LOCK = threading.Lock()
 RUNTIME_SCALING_PROCESS = None
@@ -966,6 +989,22 @@ DATA_FACTORY_ACTIONS = {
         "impact": "Materialise un lake minimal bronze -> silver -> gold avec objets de synthese et KPI de transfert.",
         "mode": "sync",
     },
+    "analytics-warehouse": {
+        "key": "analytics-warehouse",
+        "title": "Warehouse et datamarts",
+        "domain": "data",
+        "description": "Construit un schema analytics separe avec dimensions, faits et datamarts dans PostgreSQL.",
+        "impact": "Rend l'analyse multidimensionnelle explicite et separee du store operationnel.",
+        "mode": "sync",
+    },
+    "data-platform-pipeline": {
+        "key": "data-platform-pipeline",
+        "title": "Plateforme data consolidee",
+        "domain": "data",
+        "description": "Orchestre snapshot bronze, promotion lake, reconstruction analytics et controles de qualite dans une seule execution.",
+        "impact": "Produit un etat de sante consolide de la chaine data pour pilotage et livraison.",
+        "mode": "sync",
+    },
 }
 
 PRESENTATION_TEST_DEFINITIONS = {
@@ -1035,11 +1074,22 @@ PRESENTATION_TEST_DEFINITIONS = {
         "impact": "Montre un lake minimal exploitable par les KPI.",
         "dashboards": ["transfer_kpi_dashboard.html"],
     },
+    "analytics-warehouse": {
+        "key": "analytics-warehouse",
+        "title": "Warehouse et datamarts",
+        "category": "data",
+        "order": 7,
+        "action_label": "Construire",
+        "description": "Materialise un schema analytics separe avec dimensions, faits et marts metier.",
+        "expected_outcome": "Schema analytics peuple et datamarts requetables.",
+        "impact": "Couvre l'axe analytique multidimensionnel du projet.",
+        "dashboards": ["index.html", "transfer_kpi_dashboard.html"],
+    },
     "payments-live-3m": {
         "key": "payments-live-3m",
         "title": "Flux paiements 3 min",
         "category": "live",
-        "order": 7,
+        "order": 8,
         "action_label": "Lancer 3 min",
         "description": "Injecte des paiements a risque eleve pour faire varier proprement le fraud_rate.",
         "expected_outcome": "Le fraud_rate et le volume paiements evoluent en direct.",
@@ -1050,7 +1100,7 @@ PRESENTATION_TEST_DEFINITIONS = {
         "key": "massive-fraud-orders-episode",
         "title": "Episode fraude commandes",
         "category": "live",
-        "order": 8,
+        "order": 9,
         "action_label": "Lancer 3 min",
         "description": "Declenche un episode massif de commandes a risque, blocages mineurs et alertes HIGH.",
         "expected_outcome": "Les vues fraude, identite et paiements montent ensemble.",
@@ -1650,6 +1700,25 @@ def list_data_lake_promotion_reports(limit: int = 10) -> List[dict]:
     return reports
 
 
+def list_data_lake_snapshot_reports(limit: int = 10) -> List[dict]:
+    reports = []
+    for report_path in sorted((BASE_DIR / "logs").glob(DATA_LAKE_SNAPSHOT_REPORT_GLOB), reverse=True):
+        try:
+            payload = json.loads(report_path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        payload["report_file"] = str(report_path)
+        reports.append(payload)
+        if len(reports) >= limit:
+            break
+    return reports
+
+
+def latest_data_lake_snapshot_report() -> Optional[dict]:
+    reports = list_data_lake_snapshot_reports(limit=1)
+    return reports[0] if reports else None
+
+
 def latest_data_lake_promotion_report() -> Optional[dict]:
     reports = list_data_lake_promotion_reports(limit=1)
     return reports[0] if reports else None
@@ -1670,6 +1739,126 @@ def run_data_lake_promotion_pipeline() -> dict:
         "stdout_tail": (result.stdout or "").splitlines()[-20:],
         "stderr_tail": (result.stderr or "").splitlines()[-20:],
         "report": report,
+    }
+
+
+def run_analytics_warehouse_pipeline() -> dict:
+    cmd = [sys.executable, str(BASE_DIR / "scripts" / "build_analytics_warehouse.py")]
+    result = subprocess.run(
+        cmd,
+        cwd=str(BASE_DIR),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    report = _load_json_file(ANALYTICS_WAREHOUSE_REPORT_FILE)
+    return {
+        "returncode": result.returncode,
+        "stdout_tail": (result.stdout or "").splitlines()[-20:],
+        "stderr_tail": (result.stderr or "").splitlines()[-20:],
+        "report": report,
+    }
+
+
+def run_data_platform_pipeline() -> dict:
+    cmd = [sys.executable, str(BASE_DIR / "scripts" / "run_data_platform_pipeline.py")]
+    result = subprocess.run(
+        cmd,
+        cwd=str(BASE_DIR),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    report = _load_json_file(DATA_PLATFORM_PIPELINE_REPORT_FILE)
+    return {
+        "returncode": result.returncode,
+        "stdout_tail": (result.stdout or "").splitlines()[-20:],
+        "stderr_tail": (result.stderr or "").splitlines()[-20:],
+        "report": report,
+    }
+
+
+def get_analytics_warehouse_status() -> dict:
+    report = _load_json_file(ANALYTICS_WAREHOUSE_REPORT_FILE) or {}
+    live = {}
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT to_regnamespace('analytics') IS NOT NULL")
+        schema_exists = bool(cursor.fetchone()[0])
+        live["schema_exists"] = schema_exists
+        if schema_exists:
+            objects = {}
+            for object_name in [
+                "dim_date",
+                "dim_customer",
+                "dim_product",
+                "fact_order",
+                "fact_payment",
+                "fact_identity_verification",
+                "fact_checkout_attempt",
+                "fact_fraud_alert",
+                "mart_fraud_daily",
+                "mart_identity_controls_daily",
+                "mart_checkout_risk_daily",
+                "mart_product_sales_daily",
+            ]:
+                cursor.execute(f"SELECT COUNT(*) FROM analytics.{object_name}")
+                objects[object_name] = int(cursor.fetchone()[0] or 0)
+            cursor.execute("SELECT MAX(refreshed_at) FROM analytics.refresh_log")
+            latest_refresh = cursor.fetchone()[0]
+            live["objects"] = objects
+            live["latest_refresh_at"] = latest_refresh.isoformat() if latest_refresh else None
+        cursor.close()
+        conn.close()
+    except Exception as exc:
+        live["error"] = str(exc)
+    return {
+        "configured": True,
+        "schema": "analytics",
+        "report_file": str(ANALYTICS_WAREHOUSE_REPORT_FILE),
+        "latest_report": report,
+        "live": live,
+    }
+
+
+def get_data_platform_status() -> dict:
+    snapshot = latest_data_lake_snapshot_report()
+    promotion = latest_data_lake_promotion_report()
+    analytics = get_analytics_warehouse_status()
+    quality = _load_json_file(BASE_DIR / "logs" / "data_quality_report.json") or {}
+    pipeline = _load_json_file(DATA_PLATFORM_PIPELINE_REPORT_FILE) or {}
+
+    promotion_layers = (promotion or {}).get("layers") or {}
+    lake_ready = (
+        bool(snapshot)
+        and (promotion_layers.get("silver") or {}).get("status") == "published"
+        and (promotion_layers.get("gold") or {}).get("status") == "published"
+    )
+    analytics_ready = (analytics.get("latest_report") or {}).get("status") == "PASS"
+    quality_ready = bool(quality) and int(((quality.get("summary") or {}).get("failed")) or 0) == 0
+    pipeline_ready = pipeline.get("status") == "PASS"
+
+    return {
+        "configured": True,
+        "status": "ready" if all([lake_ready, analytics_ready, quality_ready, pipeline_ready]) else "attention",
+        "readiness": {
+            "lake_ready": lake_ready,
+            "analytics_ready": analytics_ready,
+            "quality_ready": quality_ready,
+            "pipeline_ready": pipeline_ready,
+        },
+        "latest_snapshot": snapshot,
+        "latest_promotion": promotion,
+        "analytics": analytics,
+        "quality": {
+            "report_file": str(BASE_DIR / "logs" / "data_quality_report.json"),
+            "latest_report": quality,
+        },
+        "pipeline": {
+            "report_file": str(DATA_PLATFORM_PIPELINE_REPORT_FILE),
+            "latest_report": pipeline,
+        },
     }
 
 
@@ -1972,6 +2161,35 @@ async def _run_data_lake_pipeline_presentation_test() -> dict:
     }
 
 
+async def _run_analytics_warehouse_presentation_test() -> dict:
+    pipeline = await asyncio.to_thread(run_analytics_warehouse_pipeline)
+    status_payload = get_analytics_warehouse_status()
+    report = pipeline.get("report") or {}
+    datamarts = report.get("datamarts") or {}
+    passed = pipeline.get("returncode") == 0 and bool(datamarts)
+    return {
+        "status": "ok" if passed else "error",
+        "message": "Le schema analytics et les datamarts ont ete construits." if passed else "Le schema analytics n'a pas pu etre construit.",
+        "async_job": False,
+        "passed": passed,
+        "highlights": [
+            f"Dimensions: {sum((report.get('dimensions') or {}).values()) if report.get('dimensions') else 0}",
+            f"Facts: {sum((report.get('facts') or {}).values()) if report.get('facts') else 0}",
+            f"Datamarts: {sum(datamarts.values()) if datamarts else 0}",
+        ],
+        "resources": status_payload,
+        "response": {
+            "build": pipeline,
+            "status": status_payload,
+        },
+        "process": {
+            "returncode": pipeline.get("returncode"),
+            "stdout_tail": pipeline.get("stdout_tail"),
+            "stderr_tail": pipeline.get("stderr_tail"),
+        },
+    }
+
+
 async def _run_live_payments_presentation_test() -> dict:
     before = _model_to_dict(await get_payment_stats(window_hours=24))
     result = await execute_data_factory_action("payments-live-3m")
@@ -2040,6 +2258,8 @@ async def execute_presentation_test(test_key: str, recipient_email: Optional[str
             result = await _run_micro_batch_presentation_test()
         elif test_key == "data-lake-pipeline":
             result = await _run_data_lake_pipeline_presentation_test()
+        elif test_key == "analytics-warehouse":
+            result = await _run_analytics_warehouse_presentation_test()
         elif test_key == "payments-live-3m":
             result = await _run_live_payments_presentation_test()
         elif test_key == "massive-fraud-orders-episode":
@@ -2210,6 +2430,20 @@ def load_id_labels():
     if ID_LABELS_CACHE is not None:
         return ID_LABELS_CACHE
 
+    records = load_id_label_records()
+    ID_LABELS_CACHE = {file_name: row["birthdate"] for file_name, row in records.items()}
+    return ID_LABELS_CACHE
+
+
+def load_id_label_records():
+    """
+    Charge les métadonnées complètes des CNI synthétiques.
+    Source: synthetic_id_labels.csv associé aux synthetic_id_cards/*.png.
+    """
+    global ID_LABEL_RECORDS_CACHE
+    if ID_LABEL_RECORDS_CACHE is not None:
+        return ID_LABEL_RECORDS_CACHE
+
     if not ID_LABELS_FILE.exists():
         raise RuntimeError(f"Fichier labels introuvable: {ID_LABELS_FILE}")
 
@@ -2221,10 +2455,19 @@ def load_id_labels():
             birthdate = (row.get("birthdate") or "").strip()
             if not file_name or not birthdate:
                 continue
-            cache[file_name] = birthdate
+            cache[file_name] = {
+                "file": file_name,
+                "first_name": (row.get("first_name") or "").strip() or None,
+                "last_name": (row.get("last_name") or "").strip() or None,
+                "sex": (row.get("sex") or "").strip() or None,
+                "birthdate": birthdate,
+                "doc_number": (row.get("doc_number") or "").strip() or None,
+                "expiry": (row.get("expiry") or "").strip() or None,
+                "is_adult": (row.get("is_adult") or "").strip() in {"1", "true", "True"},
+            }
 
-    ID_LABELS_CACHE = cache
-    return ID_LABELS_CACHE
+    ID_LABEL_RECORDS_CACHE = cache
+    return ID_LABEL_RECORDS_CACHE
 
 
 def load_id_fingerprint_model():
@@ -2279,6 +2522,16 @@ def compute_age(birthdate_str: str) -> int:
     birth = datetime.strptime(birthdate_str, "%Y-%m-%d").date()
     today = date.today()
     return today.year - birth.year - ((today.month, today.day) < (birth.month, birth.day))
+
+
+def is_expired_document(expiry_str: Optional[str]) -> bool:
+    if not expiry_str:
+        return False
+    try:
+        expiry_date = datetime.strptime(expiry_str, "%Y-%m-%d").date()
+    except ValueError:
+        return False
+    return expiry_date < date.today()
 
 def extract_age_from_id_card(id_card_file: str):
     """
@@ -4214,6 +4467,8 @@ async def root():
             "micro_batch_stats": "/api/micro-batch/stats",
             "transfer_kpis": "/api/transfer/kpis",
             "data_lake_status": "/api/data-lake/status",
+            "data_platform_status": "/api/data-platform/status",
+            "analytics_status": "/api/analytics/status",
             "kpis_readable": "/api/kpis/readable",
             "stats": "/api/stats",
             "sync": "/api/sync"
@@ -4583,6 +4838,16 @@ async def get_data_lake_status(limit_reports: int = Query(5, ge=1, le=20)):
         "reports": reports,
         "reports_count": len(reports),
     }
+
+
+@app.get("/api/data-platform/status")
+async def get_data_platform_status_endpoint():
+    return get_data_platform_status()
+
+
+@app.get("/api/analytics/status")
+async def get_analytics_status():
+    return get_analytics_warehouse_status()
 
 
 @app.get("/api/kpis/readable")
@@ -4994,6 +5259,49 @@ async def execute_data_factory_action(action_key: str) -> dict:
             "passed": passed,
             "resources": latest_report.get("layers"),
             "response": latest_report,
+            "process": {
+                "returncode": pipeline.get("returncode"),
+                "stdout_tail": pipeline.get("stdout_tail"),
+                "stderr_tail": pipeline.get("stderr_tail"),
+            },
+        }
+    elif action_key == "analytics-warehouse":
+        pipeline = run_analytics_warehouse_pipeline()
+        report = pipeline.get("report") or {}
+        datamarts = report.get("datamarts") or {}
+        passed = pipeline.get("returncode") == 0 and bool(datamarts)
+        result = {
+            "status": "ok" if passed else "error",
+            "message": (
+                "Le schema analytics et les datamarts ont ete construits."
+                if passed
+                else "La construction du schema analytics a echoue."
+            ),
+            "async_job": False,
+            "passed": passed,
+            "resources": report,
+            "response": report,
+            "process": {
+                "returncode": pipeline.get("returncode"),
+                "stdout_tail": pipeline.get("stdout_tail"),
+                "stderr_tail": pipeline.get("stderr_tail"),
+            },
+        }
+    elif action_key == "data-platform-pipeline":
+        pipeline = run_data_platform_pipeline()
+        report = pipeline.get("report") or {}
+        passed = pipeline.get("returncode") == 0 and report.get("status") == "PASS"
+        result = {
+            "status": "ok" if passed else "error",
+            "message": (
+                "La chaine data complete a ete rejouee avec succes."
+                if passed
+                else "Le pipeline consolide de la plateforme data a echoue."
+            ),
+            "async_job": False,
+            "passed": passed,
+            "resources": report.get("summary") or {},
+            "response": report,
             "process": {
                 "returncode": pipeline.get("returncode"),
                 "stdout_tail": pipeline.get("stdout_tail"),
@@ -5746,6 +6054,55 @@ async def get_id_cards(
         if len(rows) >= limit:
             break
     return rows
+
+
+@app.get("/api/id-cards/{file_name}/analysis", response_model=IdCardAnalysis)
+async def get_id_card_analysis(file_name: str):
+    """
+    Retourne une lecture détaillée d'une CNI synthétique.
+    Cette vue sert à la démonstration détaillée côté dashboard identité.
+    """
+    safe_name = Path(file_name).name
+    records = load_id_label_records()
+    record = records.get(safe_name)
+    if not record:
+        raise HTTPException(status_code=404, detail=f"ID card metadata not found: {safe_name}")
+
+    card_path = ID_CARDS_DIR / safe_name
+    if not card_path.exists():
+        raise HTTPException(status_code=404, detail=f"ID card image not found: {safe_name}")
+
+    image_sha256 = hashlib.sha256(card_path.read_bytes()).hexdigest()
+    model_enabled = os.getenv("ID_CARD_MODEL_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"}
+    fingerprint_birthdate = None
+    if model_enabled:
+        try:
+            fingerprint_birthdate = predict_birthdate_from_id_fingerprint(card_path)
+        except Exception:
+            fingerprint_birthdate = None
+    model = load_id_fingerprint_model() if model_enabled else {}
+    birthdate = record["birthdate"]
+    age = compute_age(birthdate)
+
+    return IdCardAnalysis(
+        file=safe_name,
+        first_name=record.get("first_name"),
+        last_name=record.get("last_name"),
+        sex=record.get("sex"),
+        birthdate=birthdate,
+        age=age,
+        is_adult=age >= 18,
+        doc_number=record.get("doc_number"),
+        expiry=record.get("expiry"),
+        expired=is_expired_document(record.get("expiry")),
+        image_url=f"/api/id-cards/image/{safe_name}",
+        image_sha256=image_sha256,
+        backend_analysis_source="fingerprint_model" if fingerprint_birthdate else "labels_fallback",
+        fingerprint_birthdate=fingerprint_birthdate,
+        fingerprint_match=bool(fingerprint_birthdate and fingerprint_birthdate == birthdate),
+        model_enabled=model_enabled,
+        model_version=model.get("version") if model else None,
+    )
 
 @app.get("/api/id-cards/image/{file_name}")
 async def get_id_card_image(file_name: str):

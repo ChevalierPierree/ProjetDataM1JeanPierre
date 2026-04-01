@@ -1,9 +1,15 @@
-# Pack De Rendu
+# Pack De Rendu Bloc 1
 
 Le projet peut etre exporte dans un dossier de livraison autonome contenant:
 - la documentation racine utile,
 - les preuves d'execution,
 - le code et la configuration necessaires au lancement.
+
+Le pack est volontairement centre sur le Bloc 1:
+- architecture de stockage et de traitement,
+- API et streaming,
+- Data Lake et analytics,
+- preuves de qualite, charge et resilience.
 
 ## Commandes testees
 
@@ -18,6 +24,7 @@ bash scripts/start.sh
 ### Verification complete
 
 ```bash
+bash scripts/finalize_school_delivery.sh
 bash scripts/checklist_and_launch.sh
 ```
 

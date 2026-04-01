@@ -47,17 +47,19 @@ Valider les exigences du sujet 1 et les controles complementaires avec des preuv
 ## Commandes
 
 ```bash
+bash scripts/finalize_school_delivery.sh
 ./.venv/bin/python scripts/train_id_card_fingerprint_model.py
 bash scripts/snapshot_raw_data_to_minio.sh
 ./.venv/bin/python scripts/promote_data_lake_layers.py
 ./.venv/bin/python scripts/data_quality_checks.py
 ./.venv/bin/python scripts/validate_sujet1.py
 ./.venv/bin/python scripts/test_api_rbac_rate_limit.py
+./.venv/bin/python scripts/run_data_platform_pipeline.py
 bash scripts/generate_minio_tls_certs.sh
 bash scripts/rotate_minio_credentials.sh all
 bash scripts/run_micro_batch.sh once
 ./.venv/bin/python scripts/test_db_load.py --pg-requests 120 --mongo-requests 120 --concurrency 12
-./.venv/bin/python scripts/test_resilience_failover.py --service postgres --dry-run
+./.venv/bin/python scripts/test_resilience_failover.py --service postgres
 ./.venv/bin/python scripts/validate_perfect_compliance.py
 bash scripts/clean_project_artifacts.sh
 bash scripts/build_delivery_pack.sh
@@ -70,6 +72,7 @@ bash scripts/build_delivery_pack.sh
 - `logs/data_lake_snapshot_*.json`
 - `logs/data_lake_promotion_*.json`
 - `logs/data_quality_report.json`
+- `logs/data_platform_pipeline_report.json`
 - `logs/sujet1_validation_report.json`
 - `logs/api_rbac_rate_limit_report.json`
 - `logs/db_load_test_report.json`

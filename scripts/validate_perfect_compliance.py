@@ -10,10 +10,13 @@ Validation ciblée des points de conformité "parfaite":
 
 from __future__ import annotations
 
+import atexit
 import argparse
 import json
 import os
+import signal
 import subprocess
+import time
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -25,6 +28,7 @@ import requests
 ROOT_DIR = Path(__file__).resolve().parent.parent
 LOG_DIR = ROOT_DIR / "logs"
 API_URL = os.getenv("VALIDATION_API_URL", "http://localhost:8000")
+API_LOG_FILE = LOG_DIR / "fraud_dashboard_api.log"
 
 
 @dataclass
@@ -45,6 +49,47 @@ def run_cmd(cmd: List[str], timeout: int = 300) -> Tuple[int, str, str]:
     return proc.returncode, proc.stdout, proc.stderr
 
 
+def stop_process(proc: subprocess.Popen) -> None:
+    if proc.poll() is not None:
+        return
+    proc.send_signal(signal.SIGTERM)
+    try:
+        proc.wait(timeout=8)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+
+
+def wait_url(url: str, attempts: int = 30) -> bool:
+    for _ in range(attempts):
+        try:
+            response = requests.get(url, timeout=5)
+            if response.ok:
+                return True
+        except Exception:
+            pass
+        time.sleep(1)
+    return False
+
+
+def ensure_api_up() -> Optional[subprocess.Popen]:
+    if wait_url(f"{API_URL}/health", attempts=3):
+        return None
+
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    log_handle = API_LOG_FILE.open("a", encoding="utf-8")
+    proc = subprocess.Popen(
+        [str(ROOT_DIR / ".venv" / "bin" / "python"), str(ROOT_DIR / "api" / "fraud_dashboard_api.py")],
+        cwd=ROOT_DIR,
+        stdout=log_handle,
+        stderr=subprocess.STDOUT,
+    )
+    log_handle.close()
+    if wait_url(f"{API_URL}/health", attempts=30):
+        return proc
+    stop_process(proc)
+    raise RuntimeError(f"API indisponible sur {API_URL}/health")
+
+
 def load_json(path: Path) -> Optional[Dict]:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
@@ -62,6 +107,14 @@ def latest_promotion_report() -> Optional[Dict]:
     return None
 
 
+def analytics_report() -> Optional[Dict]:
+    report_path = LOG_DIR / "analytics_warehouse_report.json"
+    report = load_json(report_path)
+    if report:
+        report["report_file"] = str(report_path)
+    return report
+
+
 def api_headers() -> Dict[str, str]:
     header_name = os.getenv("API_KEY_HEADER", "X-API-Key").strip()
     header_value = os.getenv("API_KEY_VALUE", "").strip()
@@ -77,6 +130,10 @@ def main() -> int:
     parser.add_argument("--output", default="logs/perfect_compliance_report.json")
     parser.add_argument("--run-failover", action="store_true", help="Exécute réellement stop/start docker")
     args = parser.parse_args()
+
+    local_api_proc = ensure_api_up()
+    if local_api_proc is not None:
+        atexit.register(stop_process, local_api_proc)
 
     checks: List[Check] = []
     headers = api_headers()
@@ -191,6 +248,33 @@ def main() -> int:
                 "api_summary": micro_details,
                 "stdout_tail": micro_out[-300:],
                 "stderr_tail": micro_err[-300:],
+            },
+        )
+    )
+
+    # 3b) Analytics warehouse + datamarts
+    analytics_code, analytics_out, analytics_err = run_cmd(
+        [
+            str(ROOT_DIR / ".venv" / "bin" / "python"),
+            "scripts/build_analytics_warehouse.py",
+        ],
+        timeout=360,
+    )
+    analytics_payload = analytics_report() or {}
+    datamarts = analytics_payload.get("datamarts") or {}
+    checks.append(
+        Check(
+            item="analytics_warehouse",
+            status="PASS" if analytics_code == 0 and bool(datamarts) else "FAIL",
+            details={
+                "exit_code": analytics_code,
+                "schema": analytics_payload.get("schema"),
+                "dimensions": analytics_payload.get("dimensions"),
+                "facts": analytics_payload.get("facts"),
+                "datamarts": datamarts,
+                "report_file": analytics_payload.get("report_file"),
+                "stdout_tail": analytics_out[-300:],
+                "stderr_tail": analytics_err[-300:],
             },
         )
     )

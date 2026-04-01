@@ -132,7 +132,6 @@
         <a href="fraud_types_dashboard.html">Typologies</a>
         <a href="id_cards_dashboard.html">Identite</a>
         <a href="transfer_kpi_dashboard.html">Transferts</a>
-        <a href="use_cases_dashboard.html">Use cases</a>
     </nav>
 
     <section class="masthead">
@@ -158,13 +157,12 @@
             <strong>Scope</strong>
             <div class="command-row">
                 <span class="command-chip">Fraud alerts</span>
-                <span class="command-chip">Checkout guardrail</span>
+                <span class="command-chip">Notifications</span>
                 <span class="command-chip">Refresh 1s</span>
             </div>
         </div>
         <div class="runtime-line">
-            <button class="btn-primary" onclick="refreshRuntime()">Rafraichir les flux</button>
-            <button class="btn-secondary" onclick="syncFromKafka()">Synchroniser Kafka</button>
+            <button class="btn-primary" onclick="refreshFraudDashboard()">Actualiser</button>
             <span id="runtime-status">Runtime: idle</span>
         </div>
     </div>
@@ -350,19 +348,6 @@
     <section class="panel">
         <div class="section-head">
             <div>
-                <h2>Creation de donnees fraude</h2>
-                <p>Injecter des alertes dans le backlog pour tester instantanement la supervision.</p>
-            </div>
-            <div class="section-meta" id="factory-fraud-meta">-</div>
-        </div>
-        <div class="factory-grid" id="factory-fraud-grid"></div>
-        <div class="divider"></div>
-        <div class="factory-history" id="factory-fraud-history"></div>
-    </section>
-
-    <section class="panel">
-        <div class="section-head">
-            <div>
                 <h2>Queue d'alertes</h2>
                 <p>Liste a gauche, action a droite.</p>
             </div>
@@ -418,8 +403,6 @@
     let fraudStatsCache = null;
     let notificationConfigCache = null;
     let notificationHistoryCache = [];
-    let dataFactoryItems = [];
-    let dataFactoryHistory = [];
     let opsController = null;
 
     function escapeHtml(value) {
@@ -435,11 +418,7 @@
         const el = document.getElementById('runtime-status');
         if (!el) return;
         el.textContent = `Runtime: ${message}`;
-        el.style.color = isError ? 'var(--danger)' : 'var(--ink-700)';
-    }
-
-    function sleep(ms) {
-        return new Promise(resolve => setTimeout(resolve, ms));
+        el.style.color = isError ? 'var(--danger)' : 'var(--ink-760)';
     }
 
     function setTonePill(id, label) {
@@ -530,12 +509,6 @@
     function getOperatorIdentity() {
         const value = (document.getElementById('operator-identity')?.value || '').trim();
         return value || 'ops@kivendtout.fr';
-    }
-
-    function toneForFactoryStatus(status) {
-        if (['ok', 'started'].includes(status)) return 'success';
-        if (status === 'busy') return 'warning';
-        return 'danger';
     }
 
     function buildSparklineSvg(points, tone = 'accent') {
@@ -906,87 +879,6 @@
         }
     }
 
-    function renderFraudFactory() {
-        const grid = document.getElementById('factory-fraud-grid');
-        const history = document.getElementById('factory-fraud-history');
-        const items = dataFactoryItems.filter(item => item.domain === 'fraud');
-        document.getElementById('factory-fraud-meta').textContent = `${items.length} action(s) fraude`;
-
-        if (!items.length) {
-            grid.innerHTML = '<div class="empty-state">Aucune action fraude disponible.</div>';
-        } else {
-            grid.innerHTML = items.map((item) => {
-                const lastRun = item.last_run;
-                return `
-                    <article class="factory-card">
-                        <div class="factory-meta">
-                            <span class="status-pill ${item.mode === 'live' ? 'warning' : 'cool'}">${escapeHtml(item.mode)}</span>
-                            <span class="chip ${lastRun ? toneForFactoryStatus(lastRun.status) : 'cool'}">${lastRun ? escapeHtml(lastRun.status) : 'new'}</span>
-                        </div>
-                        <div>
-                            <h3>${escapeHtml(item.title)}</h3>
-                            <p>${escapeHtml(item.description)}</p>
-                        </div>
-                        <p>${escapeHtml(item.impact)}</p>
-                        <div class="factory-actions">
-                            <button class="btn-primary" onclick="runFactoryAction('${escapeHtml(item.key)}')">${item.mode === 'live' ? 'Lancer 3 min' : 'Generer'}</button>
-                            <span class="status-pill ${lastRun ? toneForFactoryStatus(lastRun.status) : 'cool'}">${lastRun ? toShortDate(lastRun.timestamp) : 'Jamais lance'}</span>
-                        </div>
-                    </article>
-                `;
-            }).join('');
-        }
-
-        const fraudHistory = dataFactoryHistory.filter(item => item.domain === 'fraud').slice(0, 5);
-        history.innerHTML = fraudHistory.length
-            ? fraudHistory.map((item) => `
-                <article class="factory-history-item">
-                    <strong>${escapeHtml(item.title)} • ${escapeHtml(item.status)}</strong>
-                    <p>${escapeHtml(item.message)}<br>${escapeHtml(toShortDate(item.timestamp))}</p>
-                </article>
-            `).join('')
-            : '<div class="empty-state">Aucune injection fraude recente.</div>';
-    }
-
-    async function loadDataFactory() {
-        const response = await fetch(`${API_URL}/api/data-factory?limit_history=12`);
-        if (!response.ok) throw new Error(`HTTP ${response.status} on data factory`);
-        const payload = await response.json();
-        dataFactoryItems = payload.items || [];
-        dataFactoryHistory = payload.history || [];
-        renderFraudFactory();
-    }
-
-    async function runFactoryAction(actionKey) {
-        try {
-            setRuntimeStatus(`generation ${actionKey}...`);
-            const response = await fetch(`${API_URL}/api/data-factory/${encodeURIComponent(actionKey)}/run`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' }
-            });
-            const payload = await response.json();
-            if (!response.ok) throw new Error(payload.detail || `HTTP ${response.status}`);
-            setRuntimeStatus(payload.message || 'generation terminee');
-            await Promise.all([loadDataFactory(), loadAlerts(), loadStats(), loadReadableSummary()]);
-        } catch (error) {
-            console.error('Erreur data factory:', error);
-            setRuntimeStatus(`generation: ${error.message || error}`, true);
-        }
-    }
-
-    async function waitForApiReady(maxSeconds = 30) {
-        for (let i = 0; i < maxSeconds; i++) {
-            try {
-                const resp = await fetch(`${API_URL}/health`, { cache: 'no-store' });
-                if (resp.ok) return true;
-            } catch (error) {
-                // API potentiellement en redemarrage
-            }
-            await sleep(1000);
-        }
-        return false;
-    }
-
     async function loadReadableSummary() {
         try {
             const response = await fetch(`${API_URL}/api/kpis/readable?limit=200&micro_batch_window_hours=24`);
@@ -1128,75 +1020,10 @@
             loadAlerts(),
             loadReadableSummary(),
             loadNotificationConfig(),
-            loadNotificationHistory(),
-            loadDataFactory()
+            loadNotificationHistory()
         ]);
         if (opsController) {
             opsController.markRefresh('fraude');
-        }
-    }
-
-    async function refreshRuntime() {
-        try {
-            setRuntimeStatus('refresh en cours...');
-            const response = await fetch(`${API_URL}/api/runtime/refresh`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    sync_kafka: true,
-                    run_scaling: true,
-                    run_alert_scaling: true,
-                    restart_api: true,
-                    scaling_mode: 'realtime',
-                    requests: 120,
-                    concurrency: 12,
-                    duration_seconds: 30,
-                    rps: 8,
-                    alerts_mode: 'realtime',
-                    alerts_requests: 180,
-                    alerts_concurrency: 10,
-                    alerts_duration_seconds: 30,
-                    alerts_rps: 6,
-                    high_severity_ratio: 0.35,
-                    adult_order_ratio: 0.6,
-                    minor_ratio: 0.4
-                })
-            });
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        } catch (error) {
-            console.warn('Refresh runtime: interruption attendue si API restart', error);
-        }
-
-        const apiReady = await waitForApiReady(35);
-        if (!apiReady) {
-            setRuntimeStatus('API non joignable apres refresh', true);
-            return;
-        }
-
-        setRuntimeStatus('API relancee');
-        await refreshFraudDashboard();
-    }
-
-    async function syncFromKafka() {
-        try {
-            setRuntimeStatus('sync Kafka en cours...');
-            const response = await fetch(`${API_URL}/api/runtime/refresh`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    sync_kafka: true,
-                    run_scaling: false,
-                    run_alert_scaling: false,
-                    restart_api: false
-                })
-            });
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            const result = await response.json();
-            setRuntimeStatus(result.message || 'sync terminee');
-            await refreshFraudDashboard();
-        } catch (error) {
-            console.error('Erreur sync:', error);
-            setRuntimeStatus('Erreur de synchronisation', true);
         }
     }
 

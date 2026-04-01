@@ -58,6 +58,20 @@ wait_url() {
   return 1
 }
 
+wait_compose_service() {
+  local service="$1"
+  local attempts="${2:-20}"
+  local i=1
+  while [ "$i" -le "$attempts" ]; do
+    if (cd "$PROJECT_DIR" && docker compose ps --status running "$service" | grep -q "$service") >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+    i=$((i + 1))
+  done
+  return 1
+}
+
 start_api_if_needed() {
   local python_bin="$1"
   local api_pid_file="$LOG_DIR/fraud_dashboard_api.pid"
@@ -107,7 +121,7 @@ main() {
   mkdir -p "$LOG_DIR"
   touch "$LOG_DIR/runtime_refresh.log"
 
-  echo "=== CHECKLIST PATATOR + DASHBOARDS ==="
+  echo "=== CHECKLIST BLOC 1 + DASHBOARDS ==="
   echo "Projet: $PROJECT_DIR"
   echo "Python: $python_bin"
   echo
@@ -127,9 +141,9 @@ main() {
     exit 1
   fi
 
-  run_check "Service postgres up" "cd \"$PROJECT_DIR\" && docker compose ps --status running postgres | grep -q postgres"
-  run_check "Service mongodb up" "cd \"$PROJECT_DIR\" && docker compose ps --status running mongodb | grep -q mongodb"
-  run_check "Service kafka-1 up" "cd \"$PROJECT_DIR\" && docker compose ps --status running kafka-1 | grep -q kafka-1"
+  run_check "Service postgres up" "wait_compose_service postgres 15"
+  run_check "Service mongodb up" "wait_compose_service mongodb 10"
+  run_check "Service kafka-1 up" "wait_compose_service kafka-1 10"
 
   start_api_if_needed "$python_bin"
   start_dashboard_if_needed "$python_bin"
@@ -139,7 +153,6 @@ main() {
   run_check "Page types fraude accessible" "curl -fsS -m 5 http://localhost:${DASHBOARD_PORT}/fraud_types_dashboard.html"
   run_check "Page ID cards accessible" "curl -fsS -m 5 http://localhost:${DASHBOARD_PORT}/id_cards_dashboard.html"
   run_check "Page KPI transfert accessible" "curl -fsS -m 5 http://localhost:${DASHBOARD_PORT}/transfer_kpi_dashboard.html"
-  run_check "Page use cases accessible" "curl -fsS -m 5 http://localhost:${DASHBOARD_PORT}/use_cases_dashboard.html"
   run_check "API /health accessible" "curl -fsS -m 5 http://localhost:${API_PORT}/health"
   run_check "API /stats accessible" "curl -fsS -m 5 http://localhost:${API_PORT}/api/stats"
   run_check "API /checkout/stats accessible" "curl -fsS -m 5 \"http://localhost:${API_PORT}/api/checkout/stats?window_hours=24\""
@@ -147,15 +160,10 @@ main() {
   run_check "API /micro-batch/stats accessible" "curl -fsS -m 5 \"http://localhost:${API_PORT}/api/micro-batch/stats?window_hours=24\""
   run_check "API /transfer/kpis accessible" "curl -fsS -m 5 \"http://localhost:${API_PORT}/api/transfer/kpis?limit=20\""
   run_check "API /data-lake/status accessible" "curl -fsS -m 5 \"http://localhost:${API_PORT}/api/data-lake/status\""
+  run_check "API /data-platform/status accessible" "curl -fsS -m 5 \"http://localhost:${API_PORT}/api/data-platform/status\""
+  run_check "API /analytics/status accessible" "curl -fsS -m 5 \"http://localhost:${API_PORT}/api/analytics/status\""
   run_check "API /kpis/readable accessible" "curl -fsS -m 5 \"http://localhost:${API_PORT}/api/kpis/readable?limit=20&micro_batch_window_hours=24\""
-  run_check "API /alert-notifications/config accessible" "curl -fsS -m 5 \"http://localhost:${API_PORT}/api/alert-notifications/config\""
-  run_check "API /alert-notifications/history accessible" "curl -fsS -m 5 \"http://localhost:${API_PORT}/api/alert-notifications/history?limit=5\""
-  run_check "API /use-cases accessible" "curl -fsS -m 5 \"http://localhost:${API_PORT}/api/use-cases?limit_history=4\""
-  run_check "API /presentation/tests accessible" "curl -fsS -m 5 \"http://localhost:${API_PORT}/api/presentation/tests?limit_history=4\""
-  run_check "API /data-factory accessible" "curl -fsS -m 5 \"http://localhost:${API_PORT}/api/data-factory?limit_history=4\""
   run_check "API /live/state accessible" "curl -fsS -m 5 \"http://localhost:${API_PORT}/api/live/state\""
-  run_check "API /system/reset-status accessible" "curl -fsS -m 5 \"http://localhost:${API_PORT}/api/system/reset-status\""
-  run_check "API /runtime/logs accessible" "curl -fsS -m 5 \"http://localhost:${API_PORT}/api/runtime/logs?lines=5\""
 
   echo
   echo "=== RÉSUMÉ ==="
@@ -170,12 +178,10 @@ main() {
   echo "- Types:     http://localhost:${DASHBOARD_PORT}/fraud_types_dashboard.html"
   echo "- ID Cards:  http://localhost:${DASHBOARD_PORT}/id_cards_dashboard.html"
   echo "- KPI Xfer:  http://localhost:${DASHBOARD_PORT}/transfer_kpi_dashboard.html"
-  echo "- Use cases: http://localhost:${DASHBOARD_PORT}/use_cases_dashboard.html"
   echo "- API Health:http://localhost:${API_PORT}/health"
   echo
   echo "Commandes:"
   echo "- Micro-batch: bash scripts/run_micro_batch.sh once"
-  echo "- Use cases:   bash scripts/test_use_cases.sh"
   echo "- Pack de livraison:   bash scripts/build_delivery_pack.sh"
   echo
   echo "Logs:"

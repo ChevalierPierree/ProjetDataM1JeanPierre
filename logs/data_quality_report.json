@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-03-18T10:41:56.761312+00:00",
+  "generated_at": "2026-03-18T14:30:20.471494+00:00",
   "summary": {
     "total_checks": 18,
     "passed": 18,
@@ -28,19 +28,19 @@
     {
       "name": "postgres_non_empty_orders",
       "status": "PASS",
-      "value": 3991,
+      "value": 2424,
       "expected": "> 0"
     },
     {
       "name": "postgres_non_empty_order_items",
       "status": "PASS",
-      "value": 5353,
+      "value": 3786,
       "expected": "> 0"
     },
     {
       "name": "postgres_non_empty_payments",
       "status": "PASS",
-      "value": 3749,
+      "value": 2428,
       "expected": "> 0"
     },
     {

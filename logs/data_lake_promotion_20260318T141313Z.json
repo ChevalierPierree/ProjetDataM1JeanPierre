@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-03-18T08:46:36.986488+00:00",
-  "source_manifest_file": "/Users/jeanmacario/Documents/GitHub/ProjetDataM1JeanPierre/logs/data_lake_snapshot_20260317T153231Z.json",
-  "source_snapshot_utc": "20260317T153231Z",
+  "generated_at": "2026-03-18T14:13:13.053747+00:00",
+  "source_manifest_file": "/Users/jeanmacario/Documents/GitHub/ProjetDataM1JeanPierre/logs/data_lake_snapshot_20260318T141256Z.json",
+  "source_snapshot_utc": "20260318T141256Z",
   "minio_target": "https://localhost:9000",
   "layers": {
     "bronze": {
       "bucket": "bronze",
-      "snapshot_prefix": "bronze/raw_snapshot/20260317T153231Z",
+      "snapshot_prefix": "bronze/raw_snapshot/20260318T141256Z",
       "uploaded_files": 77,
       "total_bytes": 30602845
     },
@@ -15,16 +15,16 @@
       "status": "published",
       "objects": [
         {
-          "object_path": "silver/normalized_snapshot/20260317T153231Z/normalized_manifest.json",
+          "object_path": "silver/normalized_snapshot/20260318T141256Z/normalized_manifest.json",
           "size_bytes": 34265,
-          "latency_seconds": 0.261,
-          "speed_bytes_per_second": 131361.03
+          "latency_seconds": 0.197,
+          "speed_bytes_per_second": 174334.45
         },
         {
           "object_path": "silver/normalized_snapshot/latest.json",
           "size_bytes": 34265,
-          "latency_seconds": 0.232,
-          "speed_bytes_per_second": 147745.89
+          "latency_seconds": 0.161,
+          "speed_bytes_per_second": 212773.44
         }
       ],
       "summary": {
@@ -123,29 +123,29 @@
       "status": "published",
       "objects": [
         {
-          "object_path": "gold/business_kpis/20260317T153231Z/fraud_operational_kpis.json",
-          "size_bytes": 2415,
-          "latency_seconds": 0.244,
-          "speed_bytes_per_second": 9888.54
+          "object_path": "gold/business_kpis/20260318T141256Z/fraud_operational_kpis.json",
+          "size_bytes": 2420,
+          "latency_seconds": 0.157,
+          "speed_bytes_per_second": 15390.12
         },
         {
           "object_path": "gold/business_kpis/latest.json",
-          "size_bytes": 2415,
-          "latency_seconds": 0.154,
-          "speed_bytes_per_second": 15709.11
+          "size_bytes": 2420,
+          "latency_seconds": 0.189,
+          "speed_bytes_per_second": 12798.92
         }
       ],
       "business_kpis": {
-        "successful_payments": 2716,
-        "fraudulent_payments": 1,
-        "fraud_rate_percent": 0.04,
-        "total_alerts": 3530,
-        "checkout_attempts": 2092,
-        "blocked_underage_orders": 183,
-        "blocked_underage_rate_percent": 8.75,
-        "identity_verifications": 2155,
-        "orders_total": 3198,
-        "orders_manual_review": 0,
+        "successful_payments": 2096,
+        "fraudulent_payments": 218,
+        "fraud_rate_percent": 10.4,
+        "total_alerts": 2169,
+        "checkout_attempts": 1430,
+        "blocked_underage_orders": 387,
+        "blocked_underage_rate_percent": 27.06,
+        "identity_verifications": 1492,
+        "orders_total": 2332,
+        "orders_manual_review": 518,
         "events_total": 71694
       }
     }

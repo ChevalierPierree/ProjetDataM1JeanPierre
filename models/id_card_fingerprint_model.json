@@ -1,7 +1,7 @@
 {
   "model_type": "sha256_fingerprint_lookup",
   "version": "1.0.0",
-  "trained_at": "2026-03-18T10:41:57.286705+00:00",
+  "trained_at": "2026-03-18T14:30:21.016428+00:00",
   "records": 60,
   "hash_algorithm": "sha256",
   "hash_to_birthdate": {

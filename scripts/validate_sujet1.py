@@ -6,6 +6,7 @@ Genere un rapport JSON de preuves pour la validation projet.
 
 from __future__ import annotations
 
+import atexit
 import argparse
 import json
 import os
@@ -26,6 +27,7 @@ from pymongo import MongoClient
 ROOT_DIR = Path(__file__).resolve().parent.parent
 LOG_DIR = ROOT_DIR / "logs"
 API_URL = os.getenv("VALIDATION_API_URL", "http://localhost:8000")
+API_LOG_FILE = LOG_DIR / "fraud_dashboard_api.log"
 
 
 @dataclass
@@ -56,6 +58,49 @@ def run_cmd(cmd: List[str], timeout: int = 240, env: Optional[Dict[str, str]] = 
         timeout=timeout,
     )
     return proc.returncode, proc.stdout, proc.stderr
+
+
+def wait_url(url: str, attempts: int = 30) -> bool:
+    for _ in range(attempts):
+        try:
+            response = requests.get(url, timeout=5)
+            if response.ok:
+                return True
+        except Exception:
+            pass
+        time.sleep(1)
+    return False
+
+
+def wait_api_routes() -> bool:
+    urls = [
+        f"{API_URL}/health",
+        f"{API_URL}/api/fraud/reasons/stats?window_hours=24",
+        f"{API_URL}/api/identity/stats",
+    ]
+    for url in urls:
+        if not wait_url(url, attempts=30):
+            return False
+    return True
+
+
+def ensure_api_up() -> Optional[subprocess.Popen]:
+    if wait_api_routes():
+        return None
+
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    log_handle = API_LOG_FILE.open("a", encoding="utf-8")
+    proc = subprocess.Popen(
+        [str(ROOT_DIR / ".venv" / "bin" / "python"), str(ROOT_DIR / "api" / "fraud_dashboard_api.py")],
+        cwd=ROOT_DIR,
+        stdout=log_handle,
+        stderr=subprocess.STDOUT,
+    )
+    log_handle.close()
+    if wait_api_routes():
+        return proc
+    stop_process(proc)
+    raise RuntimeError(f"API indisponible sur {API_URL}/health")
 
 
 def pg_conn():
@@ -161,6 +206,9 @@ def main() -> int:
     args = parser.parse_args()
 
     LOG_DIR.mkdir(parents=True, exist_ok=True)
+    local_api_proc = ensure_api_up()
+    if local_api_proc is not None:
+        atexit.register(stop_process, local_api_proc)
     checks: List[CheckResult] = []
     headers = api_headers()
 

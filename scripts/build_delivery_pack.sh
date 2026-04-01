@@ -11,12 +11,16 @@ DOCS=(
   QUICKSTART.md
   DEMO_PROJET.md
   SUJET1_CHECKLIST.md
-  BATTERIE_TESTS_JURY.md
   SOMMAIRE_MEMOIRE_TECHNIQUE.md
-  PROMPT_PRESENTATION_IA.md
   AUDIT_CONSIGNE_INITIALE.md
   AUDIT_RENDU_PROJET.md
   AUDIT_FONCTIONNEL_FINAL.md
+  AUDIT_ARCHITECTURE_DATA.md
+  AUDIT_RNCP40875_BLOC1.md
+  RNCP_BLOC1_TRACEABILITE.md
+  ARCHITECTURE_DECISIONS.md
+  GOUVERNANCE_ET_PARTIES_PRENANTES.md
+  VEILLE_TECHNOLOGIQUE_BLOC1.md
   PACK_RENDU.md
   PATATOR_GUIDE.md
 )
@@ -28,6 +32,8 @@ PROOFS=(
   logs/api_rbac_rate_limit_report.json
   logs/db_load_test_report.json
   logs/resilience_failover_report.json
+  logs/analytics_warehouse_report.json
+  logs/data_platform_pipeline_report.json
   logs/id_card_model_report.json
   logs/transfer_kpi_history.jsonl
 )

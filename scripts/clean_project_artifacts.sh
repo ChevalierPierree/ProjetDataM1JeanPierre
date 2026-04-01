@@ -4,6 +4,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 KEEP_SNAPSHOTS="${KEEP_SNAPSHOTS:-5}"
+KEEP_PROMOTION_REPORTS="${KEEP_PROMOTION_REPORTS:-5}"
 
 removed_count=0
 
@@ -47,7 +48,13 @@ remove_path "$ROOT_DIR/logs/presentation_test_history.jsonl"
 remove_path "$ROOT_DIR/logs/alert_email_preview"
 remove_path "$ROOT_DIR/logs/micro_batch_state.json"
 remove_path "$ROOT_DIR/data/external"
-remove_path "$ROOT_DIR/delivery_pack"
+
+# Finder-style duplicate files/folders created during copies.
+while IFS= read -r -d '' duplicate_path; do
+  remove_path "$duplicate_path"
+done < <(find "$ROOT_DIR/logs" "$ROOT_DIR/delivery_pack" -maxdepth 1 \
+  \( -name '* [2-9].jsonl' -o -name '* [2-9].log' -o -name '* [2-9].txt' -o -name '* [2-9].md' -o -name '* [2-9]' \) \
+  -print0 2>/dev/null || true)
 
 # Keep only the newest N data lake snapshots.
 snapshots=()
@@ -58,6 +65,18 @@ done < <(ls -1t "$ROOT_DIR"/logs/data_lake_snapshot_*.json 2>/dev/null || true)
 if (( ${#snapshots[@]} > KEEP_SNAPSHOTS )); then
   for snapshot_path in "${snapshots[@]:KEEP_SNAPSHOTS}"; do
     remove_path "$snapshot_path"
+  done
+fi
+
+# Keep only the newest N data lake promotion reports.
+promotion_reports=()
+while IFS= read -r report_path; do
+  [[ -n "$report_path" ]] || continue
+  promotion_reports+=("$report_path")
+done < <(ls -1t "$ROOT_DIR"/logs/data_lake_promotion_*.json 2>/dev/null || true)
+if (( ${#promotion_reports[@]} > KEEP_PROMOTION_REPORTS )); then
+  for report_path in "${promotion_reports[@]:KEEP_PROMOTION_REPORTS}"; do
+    remove_path "$report_path"
   done
 fi
 

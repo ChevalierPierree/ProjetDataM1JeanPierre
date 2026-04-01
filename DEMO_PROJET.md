@@ -1,4 +1,4 @@
-# Runbook Demo Projet
+# Runbook Bloc 1
 
 ## 1. Preparation
 
@@ -30,18 +30,16 @@ A montrer:
 - cadence live 1 seconde,
 - etat des flux,
 - bouton de reset data.
+- acces aux vues metier, notamment `Identite` pour la lecture CNI cote navigateur.
 
-### Etape B - Cas metier
+### Etape B - Controle identite
 
-```bash
-bash scripts/test_use_cases.sh
-```
-
-Cas a commenter:
-- mineur + produit `Adult` -> bloque,
-- majeur + produit `Adult` -> accepte,
-- verification d'identite -> tracee,
-- alerte HIGH -> visible dans le backlog.
+Sur `http://localhost:7600/id_cards_dashboard.html`, montrer:
+- la carte selectionnee,
+- l'analyse CNI cote navigateur,
+- le recalcul local de l'age,
+- l'empreinte SHA-256 image,
+- la coherence entre diagnostic client et backend.
 
 ### Etape C - Pipeline transfert
 
@@ -70,30 +68,7 @@ A commenter:
 - `GET /api/payments/stats?window_hours=24` varie pendant le flux,
 - `GET /api/stats` varie aussi, mais plus lentement car il porte sur tout l'historique.
 
-### Etape E - Episode fraude commandes
-
-```bash
-curl -X POST http://localhost:8000/api/data-factory/massive-fraud-orders-3m/run \
-  -H 'Content-Type: application/json'
-```
-
-A commenter:
-- le flux pousse en meme temps des commandes a risque et des alertes HIGH,
-- les tentatives mineures 18+ montent dans la vue identite,
-- les paiements frauduleux montent dans la vue fraude/paiements,
-- la pression d'alertes devient visible sur `Fraude` et `Typologies`.
-
-### Etape F - Notifications
-
-```bash
-bash scripts/test_alert_notifications.sh
-```
-
-Etat actuel:
-- le circuit est fonctionnel,
-- le mode par defaut est `preview`, donc un apercu de mail est genere localement.
-
-### Etape G - Retour a l'etat initial
+### Etape E - Retour a l'etat initial
 
 Depuis un dashboard, cliquer `Reset data`.
 
@@ -111,6 +86,7 @@ curl -X POST http://localhost:8000/api/system/reset-data \
 - Les controles de majorite sont journalises et visibles dans les vues fraude et identite.
 - Le `fraud_rate` global repose sur les paiements reussis; le flux `payments-live-3m` sert a le faire varier de maniere metier.
 - Le Data Lake MinIO est exploitable en `bronze -> silver -> gold` via `scripts/promote_data_lake_layers.py`.
+- Le schema `analytics` formalise une couche warehouse minimale et ses datamarts.
 - Le reset permet de revenir a un socle de donnees stable avant une nouvelle demonstration.
 - Les preuves techniques sont disponibles dans `logs/` et dans le pack de livraison.
 

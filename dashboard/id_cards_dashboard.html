@@ -20,7 +20,7 @@
             margin-bottom: 16px;
             padding: 12px;
             border-radius: 20px;
-            background: linear-gradient(180deg, rgba(31, 79, 130, 0.05) 0%, rgba(15, 124, 130, 0.04) 100%);
+            background: linear-gradient(180deg, rgba(31, 79, 130, 0.05) 0%, rgba(91, 127, 155, 0.05) 100%);
             border: 1px solid rgba(31, 79, 130, 0.08);
         }
 
@@ -63,7 +63,6 @@
         <a href="fraud_types_dashboard.html">Typologies</a>
         <a class="active" href="id_cards_dashboard.html">Identite</a>
         <a href="transfer_kpi_dashboard.html">Transferts</a>
-        <a href="use_cases_dashboard.html">Use cases</a>
     </nav>
 
     <section class="masthead">
@@ -110,7 +109,7 @@
                     <option value="100">100 lignes</option>
                 </select>
             </label>
-            <button class="btn-primary" onclick="refreshRuntime()">Rafraichir les flux</button>
+            <button class="btn-primary" onclick="refreshAll()">Actualiser</button>
         </div>
     </div>
 
@@ -135,19 +134,6 @@
             <div class="value" id="attempts-blocked">-</div>
             <p class="support" id="attempts-blocked-copy">-</p>
         </article>
-    </section>
-
-    <section class="panel">
-        <div class="section-head">
-            <div>
-                <h2>Creation de donnees identite</h2>
-                <p>Generer des cas concrets pour le controle d'age et la verification d'identite.</p>
-            </div>
-            <div class="section-meta" id="factory-identity-meta">-</div>
-        </div>
-        <div class="factory-grid" id="factory-identity-grid"></div>
-        <div class="divider"></div>
-        <div class="factory-history" id="factory-identity-history"></div>
     </section>
 
     <section class="panel">
@@ -263,6 +249,30 @@
     <section class="panel">
         <div class="section-head">
             <div>
+                <h2>Analyse CNI cote navigateur</h2>
+                <p>Lecture locale de la carte selectionnee: metadonnees document, empreinte image et decision checkout.</p>
+            </div>
+            <div class="section-meta" id="client-analysis-meta">-</div>
+        </div>
+        <div class="two-col">
+            <article class="detail-panel" id="client-analysis-view"></article>
+            <article class="list-panel">
+                <div class="list-head">
+                    <div>
+                        <h3>Controles de coherence</h3>
+                        <p id="client-analysis-copy">-</p>
+                    </div>
+                    <span class="status-pill" id="client-analysis-pill">-</span>
+                </div>
+                <div class="list-summary" id="client-analysis-summary"></div>
+                <div class="list-items" id="client-analysis-checks"></div>
+            </article>
+        </div>
+    </section>
+
+    <section class="panel">
+        <div class="section-head">
+            <div>
                 <h2>Blocages checkout</h2>
                 <p>Dernieres tentatives refusees avec detail des produits bloques.</p>
             </div>
@@ -298,11 +308,10 @@
     let identityStats = null;
     let identityVerifications = [];
     let blockedAttempts = [];
-    let dataFactoryItems = [];
-    let dataFactoryHistory = [];
     let selectedCardFile = null;
     let selectedVerificationId = null;
     let selectedAttemptId = null;
+    const cardAnalysisCache = new Map();
     let opsController = null;
 
     function escapeHtml(value) {
@@ -324,6 +333,46 @@
         return new Date(value).toLocaleString('fr-FR');
     }
 
+    function computeClientAgeFromBirthdate(value) {
+        if (!value) return null;
+        const birth = new Date(`${value}T00:00:00`);
+        if (Number.isNaN(birth.getTime())) return null;
+        const today = new Date();
+        let age = today.getFullYear() - birth.getFullYear();
+        const monthDelta = today.getMonth() - birth.getMonth();
+        if (monthDelta < 0 || (monthDelta === 0 && today.getDate() < birth.getDate())) {
+            age -= 1;
+        }
+        return age;
+    }
+
+    function bufferToHex(buffer) {
+        return Array.from(new Uint8Array(buffer)).map(byte => byte.toString(16).padStart(2, '0')).join('');
+    }
+
+    function yesNo(value) {
+        return value ? 'Oui' : 'Non';
+    }
+
+    function readImageMetricsFromBlob(blob) {
+        return new Promise((resolve, reject) => {
+            const url = URL.createObjectURL(blob);
+            const image = new Image();
+            image.onload = () => {
+                resolve({
+                    width: image.naturalWidth || image.width || 0,
+                    height: image.naturalHeight || image.height || 0
+                });
+                URL.revokeObjectURL(url);
+            };
+            image.onerror = () => {
+                URL.revokeObjectURL(url);
+                reject(new Error('Lecture image impossible'));
+            };
+            image.src = url;
+        });
+    }
+
     function setRuntimeStatus(message, isError = false) {
         const el = document.getElementById('runtime-status');
         if (!el) return;
@@ -337,29 +386,6 @@
         el.textContent = label || '-';
         el.className = 'status-pill';
         el.classList.add(tone);
-    }
-
-    function toneForFactoryStatus(status) {
-        if (['ok', 'started'].includes(status)) return 'success';
-        if (status === 'busy') return 'warning';
-        return 'danger';
-    }
-
-    function sleep(ms) {
-        return new Promise(resolve => setTimeout(resolve, ms));
-    }
-
-    async function waitForApiReady(maxSeconds = 30) {
-        for (let i = 0; i < maxSeconds; i++) {
-            try {
-                const resp = await fetch(`${API_URL}/health`, { cache: 'no-store' });
-                if (resp.ok) return true;
-            } catch (error) {
-                // API potentiellement en redemarrage
-            }
-            await sleep(1000);
-        }
-        return false;
     }
 
     function renderSplitBar(targetId, counts, total) {
@@ -640,6 +666,7 @@
         const card = minorCards.find(item => item.file === selectedCardFile) || minorCards[0] || null;
         if (!card) {
             container.innerHTML = '<div class="empty-state">Aucune carte selectionnee.</div>';
+            renderEmptyClientCardAnalysis();
             return;
         }
         selectedCardFile = card.file;
@@ -678,6 +705,180 @@
                 <p class="detail-copy">La carte est presentee dans le lot sensible pour valider le garde-fou majorite. Toute tentative Adult issue de ce profil doit etre historisee comme refus, avec trace de la carte et des produits bloques.</p>
             </div>
         `;
+        renderClientCardAnalysis();
+    }
+
+    function renderEmptyClientCardAnalysis(message = 'Aucune analyse disponible.') {
+        document.getElementById('client-analysis-meta').textContent = '-';
+        document.getElementById('client-analysis-copy').textContent = message;
+        document.getElementById('client-analysis-pill').textContent = 'vide';
+        document.getElementById('client-analysis-pill').className = 'status-pill';
+        document.getElementById('client-analysis-pill').classList.add('cool');
+        document.getElementById('client-analysis-summary').innerHTML = '';
+        document.getElementById('client-analysis-view').innerHTML = `<div class="empty-state">${escapeHtml(message)}</div>`;
+        document.getElementById('client-analysis-checks').innerHTML = '<div class="empty-state">Aucun controle calcule.</div>';
+    }
+
+    async function getCardAnalysis(card) {
+        if (!card) return null;
+        if (cardAnalysisCache.has(card.file)) {
+            return cardAnalysisCache.get(card.file);
+        }
+
+        const analysisResponse = await fetch(`${API_URL}/api/id-cards/${encodeURIComponent(card.file)}/analysis`);
+        if (!analysisResponse.ok) {
+            throw new Error('API analyse CNI indisponible');
+        }
+        const analysis = await analysisResponse.json();
+
+        const clientData = {
+            client_age: computeClientAgeFromBirthdate(analysis.birthdate),
+            client_is_adult: computeClientAgeFromBirthdate(analysis.birthdate) >= 18,
+            client_sha256: null,
+            image_width: null,
+            image_height: null,
+            image_bytes: null
+        };
+
+        if (window.crypto?.subtle) {
+            const imageResponse = await fetch(`${API_URL}${analysis.image_url}`);
+            if (imageResponse.ok) {
+                const blob = await imageResponse.blob();
+                const buffer = await blob.arrayBuffer();
+                const digest = await window.crypto.subtle.digest('SHA-256', buffer);
+                const metrics = await readImageMetricsFromBlob(blob);
+                clientData.client_sha256 = bufferToHex(digest);
+                clientData.image_width = metrics.width;
+                clientData.image_height = metrics.height;
+                clientData.image_bytes = buffer.byteLength;
+            }
+        }
+
+        const merged = { ...analysis, ...clientData };
+        cardAnalysisCache.set(card.file, merged);
+        return merged;
+    }
+
+    async function renderClientCardAnalysis() {
+        const card = minorCards.find(item => item.file === selectedCardFile) || minorCards[0] || null;
+        if (!card) {
+            renderEmptyClientCardAnalysis();
+            return;
+        }
+
+        document.getElementById('client-analysis-meta').textContent = `${escapeHtml(card.file)} | chargement`;
+        document.getElementById('client-analysis-copy').textContent = 'Calcul des controles navigateur en cours.';
+        document.getElementById('client-analysis-view').innerHTML = '<div class="empty-state">Analyse CNI en cours...</div>';
+        document.getElementById('client-analysis-checks').innerHTML = '<div class="empty-state">Calcul des controles...</div>';
+
+        try {
+            const analysis = await getCardAnalysis(card);
+            if (!analysis || selectedCardFile !== card.file) {
+                return;
+            }
+
+            const hashMatches = analysis.client_sha256 ? analysis.client_sha256 === analysis.image_sha256 : null;
+            const ageMatches = analysis.client_age !== null ? analysis.client_age === analysis.age : null;
+            const decision = analysis.client_is_adult ? 'Autoriser un panier Adult' : 'Bloquer un panier Adult';
+            const clientDecisionTone = analysis.client_is_adult ? 'cool' : 'danger';
+            const analysisSource = analysis.backend_analysis_source === 'fingerprint_model' ? 'modele empreinte' : 'labels fallback';
+
+            document.getElementById('client-analysis-meta').textContent = `${escapeHtml(analysis.file)} | ${escapeHtml(analysisSource)}`;
+            document.getElementById('client-analysis-copy').textContent = `${analysis.last_name || '-'} ${analysis.first_name || ''}`.trim() || analysis.file;
+            document.getElementById('client-analysis-pill').textContent = analysis.client_is_adult ? 'majeur' : 'mineur';
+            document.getElementById('client-analysis-pill').className = 'status-pill';
+            document.getElementById('client-analysis-pill').classList.add(clientDecisionTone);
+            document.getElementById('client-analysis-summary').innerHTML = `
+                <div class="key-stat-row">
+                    <span class="key-stat">Age client ${fmtNumber(analysis.client_age ?? analysis.age)} ans</span>
+                    <span class="key-stat">Hash ${analysis.client_sha256 ? 'local calcule' : 'backend seul'}</span>
+                    <span class="key-stat">Decision ${escapeHtml(analysis.client_is_adult ? 'autoriser' : 'bloquer')}</span>
+                </div>
+            `;
+            document.getElementById('client-analysis-view').innerHTML = `
+                <div class="detail-head">
+                    <div>
+                        <h3>Analyse locale de ${escapeHtml(analysis.file)}</h3>
+                        <p>Le navigateur relit l'image, recalcule l'age et controle la coherence avec l'analyse backend.</p>
+                    </div>
+                    <span class="chip ${clientDecisionTone}">${escapeHtml(decision)}</span>
+                </div>
+                <div class="identity-media">
+                    <img src="${API_URL}${analysis.image_url}" alt="${escapeHtml(analysis.file)}">
+                    <div class="identity-caption">Analyse client: la carte est lue localement pour recalculer l'age, verifier l'empreinte SHA-256 et formuler la decision checkout.</div>
+                </div>
+                <div class="detail-grid">
+                    <div class="detail-card"><span>Nom</span><strong>${escapeHtml(analysis.last_name || '-')}</strong></div>
+                    <div class="detail-card"><span>Prenom</span><strong>${escapeHtml(analysis.first_name || '-')}</strong></div>
+                    <div class="detail-card"><span>Sexe</span><strong>${escapeHtml(analysis.sex || '-')}</strong></div>
+                    <div class="detail-card"><span>Naissance</span><strong>${escapeHtml(analysis.birthdate)}</strong></div>
+                    <div class="detail-card"><span>Age backend</span><strong>${fmtNumber(analysis.age)} ans</strong></div>
+                    <div class="detail-card"><span>Age client</span><strong>${fmtNumber(analysis.client_age ?? analysis.age)} ans</strong></div>
+                    <div class="detail-card"><span>Numero document</span><strong>${escapeHtml(analysis.doc_number || '-')}</strong></div>
+                    <div class="detail-card"><span>Expiration</span><strong>${escapeHtml(analysis.expiry || '-')}</strong></div>
+                    <div class="detail-card"><span>Etat document</span><strong>${escapeHtml(analysis.expired ? 'Expire' : 'Valide')}</strong></div>
+                    <div class="detail-card"><span>Source backend</span><strong>${escapeHtml(analysisSource)}</strong></div>
+                    <div class="detail-card"><span>Taille image</span><strong>${analysis.image_width && analysis.image_height ? `${fmtNumber(analysis.image_width)} x ${fmtNumber(analysis.image_height)}` : '-'}</strong></div>
+                    <div class="detail-card"><span>Poids image</span><strong>${analysis.image_bytes ? `${fmtNumber(analysis.image_bytes)} bytes` : '-'}</strong></div>
+                </div>
+                <div class="subpanel">
+                    <div class="detail-head">
+                        <div>
+                            <h3>Decision metier</h3>
+                            <p>La lecture client doit converger avec le controle majorite applique au checkout.</p>
+                        </div>
+                    </div>
+                    <div class="status-grid">
+                        <div class="split-metric">Client majeur<strong>${yesNo(analysis.client_is_adult)}</strong></div>
+                        <div class="split-metric">Hash identique<strong>${hashMatches === null ? 'N/A' : yesNo(hashMatches)}</strong></div>
+                        <div class="split-metric">Age coherent<strong>${ageMatches === null ? 'N/A' : yesNo(ageMatches)}</strong></div>
+                    </div>
+                    <div class="divider"></div>
+                    <p class="detail-copy">Cette section rend la demonstration plus concrete: le front recalcule une partie du diagnostic sans dependre uniquement du backend. Pour une carte mineure, la conclusion attendue reste un blocage des produits Adult.</p>
+                </div>
+            `;
+
+            const checks = [
+                {
+                    title: 'Majorite detectee',
+                    copy: `Client ${analysis.client_is_adult ? 'majeur' : 'mineur'} a partir de ${analysis.birthdate}.`,
+                    tone: analysis.client_is_adult ? 'cool' : 'danger'
+                },
+                {
+                    title: 'Empreinte image',
+                    copy: hashMatches === null
+                        ? 'Web Crypto indisponible sur ce navigateur, hash non recalcule localement.'
+                        : (hashMatches ? 'Le hash navigateur correspond au hash backend.' : 'Le hash navigateur ne correspond pas au hash backend.'),
+                    tone: hashMatches === null ? 'warning' : (hashMatches ? 'success' : 'danger')
+                },
+                {
+                    title: 'Source d analyse',
+                    copy: analysis.fingerprint_birthdate
+                        ? `Le modele empreinte (${analysis.model_version || 'version inconnue'}) retrouve ${analysis.fingerprint_birthdate}.`
+                        : 'Le backend a bascule sur les labels du dataset pour retrouver la date de naissance.',
+                    tone: analysis.fingerprint_birthdate ? 'success' : 'warning'
+                },
+                {
+                    title: 'Statut document',
+                    copy: analysis.expired ? 'Le document est expire et devrait etre traite en anomalie.' : 'Le document est encore valide sur la date d expiration.',
+                    tone: analysis.expired ? 'danger' : 'success'
+                }
+            ];
+            document.getElementById('client-analysis-checks').innerHTML = checks.map(item => `
+                <article class="list-item">
+                    <div class="list-item-head">
+                        <div>
+                            <div class="list-item-title">${escapeHtml(item.title)}</div>
+                            <div class="list-item-meta">${escapeHtml(item.copy)}</div>
+                        </div>
+                        <span class="chip ${item.tone}">${escapeHtml(item.tone)}</span>
+                    </div>
+                </article>
+            `).join('');
+        } catch (error) {
+            console.error('Erreur analyse CNI:', error);
+            renderEmptyClientCardAnalysis(`Analyse indisponible: ${error.message || error}`);
+        }
     }
 
     function renderBlockedAttemptsList() {
@@ -814,79 +1015,9 @@
         renderAttemptDetail();
     }
 
-    function renderIdentityFactory() {
-        const grid = document.getElementById('factory-identity-grid');
-        const history = document.getElementById('factory-identity-history');
-        const items = dataFactoryItems.filter(item => ['identity', 'checkout'].includes(item.domain));
-        document.getElementById('factory-identity-meta').textContent = `${items.length} action(s) identite / checkout`;
-
-        if (!items.length) {
-            grid.innerHTML = '<div class="empty-state">Aucune action identite disponible.</div>';
-        } else {
-            grid.innerHTML = items.map((item) => {
-                const lastRun = item.last_run;
-                return `
-                    <article class="factory-card">
-                        <div class="factory-meta">
-                            <span class="status-pill ${item.mode === 'live' ? 'warning' : 'cool'}">${escapeHtml(item.domain)}</span>
-                            <span class="chip ${lastRun ? toneForFactoryStatus(lastRun.status) : 'cool'}">${lastRun ? escapeHtml(lastRun.status) : 'new'}</span>
-                        </div>
-                        <div>
-                            <h3>${escapeHtml(item.title)}</h3>
-                            <p>${escapeHtml(item.description)}</p>
-                        </div>
-                        <p>${escapeHtml(item.impact)}</p>
-                        <div class="factory-actions">
-                            <button class="btn-primary" onclick="runFactoryAction('${escapeHtml(item.key)}')">${item.mode === 'live' ? 'Lancer 3 min' : 'Generer'}</button>
-                            <span class="status-pill ${lastRun ? toneForFactoryStatus(lastRun.status) : 'cool'}">${lastRun ? toShortDate(lastRun.timestamp) : 'Jamais lance'}</span>
-                        </div>
-                    </article>
-                `;
-            }).join('');
-        }
-
-        const identityHistory = dataFactoryHistory
-            .filter(item => ['identity', 'checkout'].includes(item.domain))
-            .slice(0, 6);
-        history.innerHTML = identityHistory.length
-            ? identityHistory.map((item) => `
-                <article class="factory-history-item">
-                    <strong>${escapeHtml(item.title)} • ${escapeHtml(item.status)}</strong>
-                    <p>${escapeHtml(item.message)}<br>${escapeHtml(toShortDate(item.timestamp))}</p>
-                </article>
-            `).join('')
-            : '<div class="empty-state">Aucune generation recente.</div>';
-    }
-
-    async function loadDataFactory() {
-        const response = await fetch(`${API_URL}/api/data-factory?limit_history=12`);
-        if (!response.ok) throw new Error(`HTTP ${response.status} on data factory`);
-        const payload = await response.json();
-        dataFactoryItems = payload.items || [];
-        dataFactoryHistory = payload.history || [];
-        renderIdentityFactory();
-    }
-
-    async function runFactoryAction(actionKey) {
-        try {
-            setRuntimeStatus(`generation ${actionKey}...`);
-            const response = await fetch(`${API_URL}/api/data-factory/${encodeURIComponent(actionKey)}/run`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' }
-            });
-            const payload = await response.json();
-            if (!response.ok) throw new Error(payload.detail || `HTTP ${response.status}`);
-            setRuntimeStatus(payload.message || 'generation terminee');
-            await refreshAll();
-        } catch (error) {
-            console.error('Erreur data factory:', error);
-            setRuntimeStatus(`generation: ${error.message || error}`, true);
-        }
-    }
-
     async function refreshAll() {
         try {
-            await Promise.all([loadCards(), loadAttemptStats(), loadIdentityStats(), loadIdentityVerifications(), loadBlockedAttempts(), loadDataFactory()]);
+            await Promise.all([loadCards(), loadAttemptStats(), loadIdentityStats(), loadIdentityVerifications(), loadBlockedAttempts()]);
             updateHero();
             if (opsController) {
                 opsController.markRefresh('identite');
@@ -900,47 +1031,6 @@
             document.getElementById('verification-detail').innerHTML = '<div class="empty-state">Erreur de chargement.</div>';
             document.getElementById('attempt-detail').innerHTML = '<div class="empty-state">Erreur de chargement.</div>';
         }
-    }
-
-    async function refreshRuntime() {
-        try {
-            setRuntimeStatus('refresh en cours...');
-            const response = await fetch(`${API_URL}/api/runtime/refresh`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    sync_kafka: true,
-                    run_scaling: true,
-                    run_alert_scaling: true,
-                    restart_api: true,
-                    scaling_mode: 'realtime',
-                    requests: 120,
-                    concurrency: 12,
-                    duration_seconds: 30,
-                    rps: 8,
-                    alerts_mode: 'realtime',
-                    alerts_requests: 180,
-                    alerts_concurrency: 10,
-                    alerts_duration_seconds: 30,
-                    alerts_rps: 6,
-                    high_severity_ratio: 0.35,
-                    adult_order_ratio: 0.6,
-                    minor_ratio: 0.4
-                })
-            });
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        } catch (error) {
-            console.warn('Refresh runtime: interruption attendue si API restart', error);
-        }
-
-        const ready = await waitForApiReady(35);
-        if (!ready) {
-            setRuntimeStatus('API non joignable apres refresh', true);
-            return;
-        }
-
-        setRuntimeStatus('API relancee');
-        await refreshAll();
     }
 
     document.getElementById('attempt-limit').addEventListener('change', loadBlockedAttempts);
@@ -958,7 +1048,6 @@
         }
         setRuntimeStatus('idle');
         refreshAll();
-        setInterval(refreshAll, 1000);
         if (window.KiLiveSync) {
             window.KiLiveSync.attach({
                 apiUrl: API_URL,

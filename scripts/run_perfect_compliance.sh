@@ -67,35 +67,38 @@ echo
 ensure_api_up
 echo
 
-echo "[1/9] RBAC + quotas API"
+echo "[1/10] RBAC + quotas API"
 "${PYTHON_BIN}" "${ROOT_DIR}/scripts/test_api_rbac_rate_limit.py"
 
-echo "[2/9] Génération cert TLS MinIO"
+echo "[2/10] Génération cert TLS MinIO"
 bash "${ROOT_DIR}/scripts/generate_minio_tls_certs.sh"
 
-echo "[3/9] Snapshot Data Lake (compte bronze-writer)"
+echo "[3/10] Snapshot Data Lake (compte bronze-writer)"
 bash "${ROOT_DIR}/scripts/snapshot_raw_data_to_minio.sh"
 
-echo "[4/9] Promotion bronze -> silver -> gold"
+echo "[4/10] Promotion bronze -> silver -> gold"
 "${PYTHON_BIN}" "${ROOT_DIR}/scripts/promote_data_lake_layers.py"
 
-echo "[5/9] Flux micro-batch (1 fenêtre)"
+echo "[5/10] Warehouse analytics + datamarts"
+"${PYTHON_BIN}" "${ROOT_DIR}/scripts/build_analytics_warehouse.py"
+
+echo "[6/10] Flux micro-batch (1 fenêtre)"
 "${PYTHON_BIN}" "${ROOT_DIR}/scripts/micro_batch_events_to_postgres.py" --run-once --window-seconds 30
 
-echo "[6/9] Tests charge DB"
+echo "[7/10] Tests charge DB"
 "${PYTHON_BIN}" "${ROOT_DIR}/scripts/test_db_load.py" --pg-requests 120 --mongo-requests 120 --concurrency 12
 
-echo "[7/9] Tests résilience"
+echo "[8/10] Tests résilience"
 if [[ "${RUN_FAILOVER}" == "true" ]]; then
   "${PYTHON_BIN}" "${ROOT_DIR}/scripts/test_resilience_failover.py" --service postgres
 else
   "${PYTHON_BIN}" "${ROOT_DIR}/scripts/test_resilience_failover.py" --service postgres --dry-run
 fi
 
-echo "[8/9] Validation sujet 1"
+echo "[9/10] Validation sujet 1"
 "${PYTHON_BIN}" "${ROOT_DIR}/scripts/validate_sujet1.py"
 
-echo "[9/9] Validation conformité parfaite"
+echo "[10/10] Validation conformité parfaite"
 if [[ "${RUN_FAILOVER}" == "true" ]]; then
   "${PYTHON_BIN}" "${ROOT_DIR}/scripts/validate_perfect_compliance.py" --run-failover
 else
@@ -111,3 +114,4 @@ echo " - logs/db_load_test_report.json"
 echo " - logs/resilience_failover_report.json"
 echo " - logs/transfer_kpi_history.jsonl"
 echo " - logs/data_lake_promotion_*.json"
+echo " - logs/analytics_warehouse_report.json"
